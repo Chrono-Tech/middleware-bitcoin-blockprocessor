@@ -2,6 +2,7 @@ const ipc = require('node-ipc'),
   config = require('../config'),
   path = require('path'),
   fs = require('fs'),
+  _ = require('lodash'),
   RPCBase = require('bcoin/lib/http/rpcbase');
 
 Object.assign(ipc.config, {
@@ -34,6 +35,12 @@ const init = async node => {
   node.rpc.add('getcoinsbyaddress', node.getCoinsByAddress.bind(node));
   node.rpc.add('getmetabyaddress', node.getMetaByAddress.bind(node));
 
+
+  node.rpc.add('sendrawtransactionnotify', (...args)=>{
+    node.emit('pushed_tx', _.get(args, '0.0'));
+    return node.rpc.sendRawTransaction.call(node.rpc, ...args);
+  });
+
   ipc.serve(() => {
     ipc.server.on('message', async (data, socket) => {
       try {
@@ -42,6 +49,7 @@ const init = async node => {
 
         ipc.server.emit(socket, 'message', {result: json, id: data.id});
       } catch (e) {
+        console.log(e);
         ipc.server.emit(socket, 'message', {
           result: null,
           error: {

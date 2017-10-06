@@ -6,6 +6,7 @@ const bcoin = require('bcoin'),
   amqp = require('amqplib'),
   memwatch = require('memwatch-next'),
   bunyan = require('bunyan'),
+  TX = require('bcoin/lib/primitives/tx'),
   customNetworkRegistrator = require('./networks'),
   log = bunyan.createLogger({name: 'core.blockProcessor'}),
   config = require('./config');
@@ -25,7 +26,7 @@ const node = new bcoin.fullnode({
   spv: true,
   indexTX: true,
   indexAddress: true,
-  'log-level': 'debug',
+  'log-level': 'error',
   'coinbase-address': config.bitcoin.coinbase
 });
 
@@ -59,6 +60,17 @@ const init = async function () {
 
     await Promise.all(filtered.map(item =>
       eventsEmitterService(amqpInstance, `${config.rabbit.serviceName}_transaction.${item.address}`, Object.assign(item, {block: entry.height}))
+    ));
+
+  });
+
+  node.on('pushed_tx', async (tx) => {
+
+    let filtered = await filterAccountsService({txs: [TX.fromRaw(tx, 'hex')]});
+    console.log(filtered);
+
+    await Promise.all(filtered.map(item =>
+      eventsEmitterService(amqpInstance, `${config.rabbit.serviceName}_transaction.${item.address}`, Object.assign(item, {block: -1}))
     ));
 
   });
