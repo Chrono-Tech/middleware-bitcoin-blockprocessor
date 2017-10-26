@@ -3,6 +3,8 @@ const ipc = require('node-ipc'),
   path = require('path'),
   fs = require('fs'),
   _ = require('lodash'),
+  Coin = require('bcoin/lib/primitives/coin'),
+  Network = require('bcoin/lib/protocol/network'),
   RPCBase = require('bcoin/lib/http/rpcbase');
 
 Object.assign(ipc.config, {
@@ -32,36 +34,40 @@ const init = async node => {
   }
 
   node.rpc.add('gettxbyaddress', node.getTXByAddress.bind(node));
-  node.rpc.add('getcoinsbyaddress', node.getCoinsByAddress.bind(node));
+  node.rpc.add('getcoinsbyaddress', async (...args) => {
+    let coins = await node.getCoinsByAddress.bind(node)(...args);
+    return coins.map(coin =>
+      coin.getJSON(config.bitcoin.network)
+    );
+  });
   node.rpc.add('getmetabyaddress', node.getMetaByAddress.bind(node));
 
-
-  node.rpc.add('sendrawtransactionnotify', (...args)=>{
+  node.rpc.add('sendrawtransactionnotify', (...args) => {
     node.emit('pushed_tx', _.get(args, '0.0'));
     return node.rpc.sendRawTransaction.call(node.rpc, ...args);
   });
 
   ipc.serve(() => {
-    ipc.server.on('message', async (data, socket) => {
-      try {
-        data = JSON.parse(data);
-        const json = await node.rpc.execute(data);
+      ipc.server.on('message', async (data, socket) => {
+        try {
+          data = JSON.parse(data);
+          const json = await node.rpc.execute(data);
 
-        ipc.server.emit(socket, 'message', {result: json, id: data.id});
-      } catch (e) {
-        console.log(e);
-        ipc.server.emit(socket, 'message', {
-          result: null,
-          error: {
-            message: 'Invalid request.',
-            code: RPCBase.errors.INVALID_REQUEST
-          }
+          ipc.server.emit(socket, 'message', {result: json, id: data.id});
+        } catch (e) {
+          console.log(e);
+          ipc.server.emit(socket, 'message', {
+              result: null,
+              error: {
+                message: 'Invalid request.',
+                code: RPCBase.errors.INVALID_REQUEST
+              }
+            }
+          );
         }
-        );
-      }
 
-    });
-  }
+      });
+    }
   );
 
   ipc.server.start();
