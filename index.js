@@ -67,7 +67,6 @@ const init = async function () {
   node.on('pushed_tx', async (tx) => {
 
     let filtered = await filterAccountsService({txs: [TX.fromRaw(tx, 'hex')]});
-    console.log(filtered);
 
     await Promise.all(filtered.map(item =>
       eventsEmitterService(amqpInstance, `${config.rabbit.serviceName}_transaction.${item.address}`, Object.assign(item, {block: -1}))

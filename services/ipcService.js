@@ -3,8 +3,6 @@ const ipc = require('node-ipc'),
   path = require('path'),
   fs = require('fs'),
   _ = require('lodash'),
-  Coin = require('bcoin/lib/primitives/coin'),
-  Network = require('bcoin/lib/protocol/network'),
   RPCBase = require('bcoin/lib/http/rpcbase');
 
 Object.assign(ipc.config, {
@@ -48,26 +46,25 @@ const init = async node => {
   });
 
   ipc.serve(() => {
-      ipc.server.on('message', async (data, socket) => {
-        try {
-          data = JSON.parse(data);
-          const json = await node.rpc.execute(data);
+    ipc.server.on('message', async (data, socket) => {
+      try {
+        data = JSON.parse(data);
+        const json = await node.rpc.execute(data);
 
-          ipc.server.emit(socket, 'message', {result: json, id: data.id});
-        } catch (e) {
-          console.log(e);
-          ipc.server.emit(socket, 'message', {
-              result: null,
-              error: {
-                message: 'Invalid request.',
-                code: RPCBase.errors.INVALID_REQUEST
-              }
-            }
-          );
+        ipc.server.emit(socket, 'message', {result: json, id: data.id});
+      } catch (e) {
+        ipc.server.emit(socket, 'message', {
+          result: null,
+          error: {
+            message: 'Invalid request.',
+            code: RPCBase.errors.INVALID_REQUEST
+          }
         }
+        );
+      }
 
-      });
-    }
+    });
+  }
   );
 
   ipc.server.start();
