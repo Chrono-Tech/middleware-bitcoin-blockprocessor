@@ -1,7 +1,7 @@
-const require_all = require('require-all'),
+const requireAll = require('require-all'),
   _ = require('lodash'),
   bcoinNetworks = require('bcoin/lib/protocol/networks'),
-  networks = require_all({
+  networks = requireAll({
     dirname: __dirname,
     filter: /(.+Network)\.js$/,
     recursive: true
