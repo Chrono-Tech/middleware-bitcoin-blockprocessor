@@ -1,5 +1,5 @@
 const mongoose = require('mongoose'),
-  messages = require('../factories/messages/accountMessageFactory');
+  messages = require('../factories/messages/addressMessageFactory');
 
 /** @model accountModel
  *  @description account model - represents an bitcoin account
