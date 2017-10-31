@@ -3,9 +3,9 @@ const BN = require('bcoin/lib/crypto/bn'),
   util = require('bcoin/lib/utils/util');
 
 
-const bccnet = {};
+const btgnet = {};
 
-bccnet.type = 'bcc';
+btgnet.type = 'btg';
 
 let block = Block.fromRaw('01000000000000000000000000000000000000000000000000000000000' +
   '00000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f4' +
@@ -15,19 +15,19 @@ let block = Block.fromRaw('01000000000000000000000000000000000000000000000000000
   '616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03' +
   '909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000', 'hex');
 
-bccnet.seeds = [
-  'seed.bitcoinabc.org',
-  'seed-abc.bitcoinforks.org',
-  'btccash-seeder.bitcoinunlimited.info',
-  'seed.bitprim.org',
-  'seed.deadalnix.me',
-  'seeder.criptolayer.net'
+btgnet.seeds = [
+  'seed.bitcoin.sipa.be',
+  'dnsseed.bluematt.me',
+  'dnsseed.bitcoin.dashjr.org',
+  'seed.bitcoinstats.com',
+  'seed.bitcoin.jonasschnelli.ch',
+  'seed.btc.petertodd.org'
 
 ];
 
-bccnet.magic = 0xd9b4bef9;
-bccnet.port = 8333;
-bccnet.checkpointMap = {
+btgnet.magic = 0xd9b4bef9;
+btgnet.port = 8333;
+btgnet.checkpointMap = {
   11111: util.revHex('0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d'),
   33333: util.revHex('000000002dd5588a74784eaa7ab0507a18ad16a236e7b1ce69f00d7ddfb5d0a6'),
   74000: util.revHex('0000000000573993a3c9e41ce34471c079dcf5f52a0e824a81e7f953b8661a20'),
@@ -44,14 +44,14 @@ bccnet.checkpointMap = {
   478559: util.revHex('000000000000000000651ef99cb9fcbe0dadde1d424bd9f15ff20136191a5eec')
 };
 
-bccnet.lastCheckpoint = 478559;
+btgnet.lastCheckpoint = 478559;
 
-bccnet.halvingInterval = 210000;
+btgnet.halvingInterval = 210000;
 
-bccnet.genesis = block.toHeaders();
-bccnet.genesisBlock = block.toRaw().toString('hex');
+btgnet.genesis = block.toHeaders();
+btgnet.genesisBlock = block.toRaw().toString('hex');
 
-bccnet.pow = {
+btgnet.pow = {
   limit: new BN(
     '00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
     'hex'
@@ -65,7 +65,7 @@ bccnet.pow = {
   noRetargeting: false
 };
 
-bccnet.pow = {
+btgnet.pow = {
   /**
    * Default target.
    * @const {BN}
@@ -142,7 +142,7 @@ bccnet.pow = {
  * @default
  */
 
-bccnet.block = {
+btgnet.block = {
   /**
    * Height at which bip34 was activated.
    * Used for avoiding bip30 checks.
@@ -215,7 +215,7 @@ bccnet.block = {
  * @default
  */
 
-bccnet.bip30 = {
+btgnet.bip30 = {
   91842: 'eccae000e3c8e4e093936360431f3b7603c563c1ff6181390a4d0a0000000000',
   91880: '21d77ccb4c08386a04ac0196ae10f6a1d2c2a377558ca190f143070000000000'
 };
@@ -226,7 +226,7 @@ bccnet.bip30 = {
  * @default
  */
 
-bccnet.activationThreshold = 1916; // 95% of 2016
+btgnet.activationThreshold = 1916; // 95% of 2016
 
 /**
  * Confirmation window for versionbits.
@@ -234,7 +234,7 @@ bccnet.activationThreshold = 1916; // 95% of 2016
  * @default
  */
 
-bccnet.minerWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
+btgnet.minerWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
 
 /**
  * Deployments for versionbits.
@@ -242,7 +242,7 @@ bccnet.minerWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
  * @default
  */
 
-bccnet.deployments = {
+btgnet.deployments = {
   csv: {
     name: 'csv',
     bit: 0,
@@ -291,11 +291,11 @@ bccnet.deployments = {
  * @default
  */
 
-bccnet.deploys = [
-  bccnet.deployments.csv,
-  bccnet.deployments.segwit,
-  bccnet.deployments.segsignal,
-  bccnet.deployments.testdummy
+btgnet.deploys = [
+  btgnet.deployments.csv,
+  btgnet.deployments.segwit,
+  btgnet.deployments.segsignal,
+  btgnet.deployments.testdummy
 ];
 
 /**
@@ -304,7 +304,7 @@ bccnet.deploys = [
  * @default
  */
 
-bccnet.keyPrefix = {
+btgnet.keyPrefix = {
   privkey: 0x80,
   xpubkey: 0x0488b21e,
   xprivkey: 0x0488ade4,
@@ -318,7 +318,7 @@ bccnet.keyPrefix = {
  * @enum {Number}
  */
 
-bccnet.addressPrefix = {
+btgnet.addressPrefix = {
   pubkeyhash: 0x00,
   scripthash: 0x05,
   witnesspubkeyhash: 0x06,
@@ -333,7 +333,7 @@ bccnet.addressPrefix = {
  * @default
  */
 
-bccnet.requireStandard = true;
+btgnet.requireStandard = true;
 
 /**
  * Default http port.
@@ -341,7 +341,7 @@ bccnet.requireStandard = true;
  * @default
  */
 
-bccnet.rpcPort = 8332;
+btgnet.rpcPort = 8332;
 
 /**
  * Default min relay rate.
@@ -349,7 +349,7 @@ bccnet.rpcPort = 8332;
  * @default
  */
 
-bccnet.minRelay = 1000;
+btgnet.minRelay = 1000;
 
 /**
  * Default normal relay rate.
@@ -357,7 +357,7 @@ bccnet.minRelay = 1000;
  * @default
  */
 
-bccnet.feeRate = 100000;
+btgnet.feeRate = 100000;
 
 /**
  * Maximum normal relay rate.
@@ -365,20 +365,20 @@ bccnet.feeRate = 100000;
  * @default
  */
 
-bccnet.maxFeeRate = 400000;
+btgnet.maxFeeRate = 400000;
 
 /**
  * Whether to allow self-connection.
  * @const {Boolean}
  */
 
-bccnet.selfConnect = false;
+btgnet.selfConnect = false;
 
 /**
  * Whether to request mempool on sync.
  * @const {Boolean}
  */
 
-bccnet.requestMempool = false;
+btgnet.requestMempool = false;
 
-module.exports = bccnet;
+module.exports = btgnet;

@@ -25,7 +25,7 @@ const node = new bcoin.fullnode({
   spv: true,
   indexTX: true,
   indexAddress: true,
-  'log-level': 'error',
+  'log-level': 'debug',
   'coinbase-address': config.bitcoin.coinbase
 });
 
