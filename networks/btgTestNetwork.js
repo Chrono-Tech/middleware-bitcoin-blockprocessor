@@ -3,9 +3,9 @@ const BN = require('bcoin/lib/crypto/bn'),
   util = require('bcoin/lib/utils/util');
 
 
-const bcctestnet = {};
+const btgtestnet = {};
 
-bcctestnet.type = 'bcctest';
+btgtestnet.type = 'btgtest';
 
 let block = Block.fromRaw('0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3' +
   '888a51323a9fb8aa4b1e5e4adae5494dffff001d1aa4ae180101000000010000000000000000000000000000000000000000000000000000000000000000' +
@@ -13,26 +13,27 @@ let block = Block.fromRaw('01000000000000000000000000000000000000000000000000000
   '6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962' +
   'e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000', 'hex');
 
-bcctestnet.seeds = [
-  'testnet-seed.bitcoinabc.org',
-  'testnet-seed-abc.bitcoinforks.org',
-  'testnet-seed.bitprim.org',
-  'testnet-seed.deadalnix.me',
-  'testnet-seeder.criptolayer.net'
+btgtestnet.seeds = [
+  'testnet-seed.bitcoin.jonasschnelli.ch',
+  'seed.tbtc.petertodd.org',
+  'testnet-seed.bluematt.me',
+  'testnet-seed.bitcoin.schildbach.de'
 
 ];
 
-bcctestnet.magic = 0x0709110b;
-bcctestnet.port = 18333;
+btgtestnet.magic = 0x0709110b;
+btgtestnet.port = 18333;
+btgtestnet.checkpointMap = {
+  546: util.revHex('000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70')
+};
 
-bcctestnet.checkpointMap = {};
+btgtestnet.lastCheckpoint = 546;
 
+btgtestnet.halvingInterval = 210000;
 
-bcctestnet.halvingInterval = 210000;
-
-bcctestnet.genesis = block.toHeaders();
-bcctestnet.genesisBlock = block.toRaw().toString('hex');
-bcctestnet.pow = {
+btgtestnet.genesis = block.toHeaders();
+btgtestnet.genesisBlock = block.toRaw().toString('hex');
+btgtestnet.pow = {
   limit: new BN(
     '00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
     'hex'
@@ -49,9 +50,9 @@ bcctestnet.pow = {
   noRetargeting: false
 };
 
-bcctestnet.block = {
+btgtestnet.block = {
   bip34height: 21111,
-  bip34hash: util.revHex('0000000023b3a96d3484e5abb3755c413e7d41500f8e2a5c3f0dd01299cd8ef8'),
+  bip34hash: 'f88ecd9912d00d3f5c2a8e0f50417d3e415c75b3abe584346da9b32300000000',
   bip65height: 581885,
   bip65hash: 'b61e864fbec41dfaf09da05d1d76dc068b0dd82ee7982ff255667f0000000000',
   bip66height: 330776,
@@ -62,13 +63,13 @@ bcctestnet.block = {
   slowHeight: 950000
 };
 
-bcctestnet.bip30 = {};
+btgtestnet.bip30 = {};
 
-bcctestnet.activationThreshold = 1512; // 75% for testchains
+btgtestnet.activationThreshold = 1512; // 75% for testchains
 
-bcctestnet.minerWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
+btgtestnet.minerWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
 
-bcctestnet.deployments = {
+btgtestnet.deployments = {
   csv: {
     name: 'csv',
     bit: 0,
@@ -111,14 +112,14 @@ bcctestnet.deployments = {
   }
 };
 
-bcctestnet.deploys = [
-  bcctestnet.deployments.csv,
-  bcctestnet.deployments.segwit,
-  bcctestnet.deployments.segsignal,
-  bcctestnet.deployments.testdummy
+btgtestnet.deploys = [
+  btgtestnet.deployments.csv,
+  btgtestnet.deployments.segwit,
+  btgtestnet.deployments.segsignal,
+  btgtestnet.deployments.testdummy
 ];
 
-bcctestnet.keyPrefix = {
+btgtestnet.keyPrefix = {
   privkey: 0xef,
   xpubkey: 0x043587cf,
   xprivkey: 0x04358394,
@@ -127,7 +128,7 @@ bcctestnet.keyPrefix = {
   coinType: 1
 };
 
-bcctestnet.addressPrefix = {
+btgtestnet.addressPrefix = {
   pubkeyhash: 0x6f,
   scripthash: 0xc4,
   witnesspubkeyhash: 0x03,
@@ -135,18 +136,18 @@ bcctestnet.addressPrefix = {
   bech32: 'tb'
 };
 
-bcctestnet.requireStandard = false;
+btgtestnet.requireStandard = false;
 
-bcctestnet.rpcPort = 18332;
+btgtestnet.rpcPort = 18332;
 
-bcctestnet.minRelay = 1000;
+btgtestnet.minRelay = 1000;
 
-bcctestnet.feeRate = 20000;
+btgtestnet.feeRate = 20000;
 
-bcctestnet.maxFeeRate = 60000;
+btgtestnet.maxFeeRate = 60000;
 
-bcctestnet.selfConnect = false;
+btgtestnet.selfConnect = false;
 
-bcctestnet.requestMempool = false;
+btgtestnet.requestMempool = false;
 
-module.exports = bcctestnet;
+module.exports = btgtestnet;
