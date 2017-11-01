@@ -19,14 +19,28 @@ bcctestnet.seeds = [
   'testnet-seed.bitprim.org',
   'testnet-seed.deadalnix.me',
   'testnet-seeder.criptolayer.net'
-
 ];
 
 bcctestnet.magic = 0x0709110b;
 bcctestnet.port = 18333;
+bcctestnet.checkpointMap = {
+  546: util.revHex('000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70'),
+  200000: util.revHex('0000000000287bffd321963ef05feab753ebe274e1d78b2fd4e2bfe9ad3aa6f2'),
+  400000: util.revHex('000000000598cbbb1e79057b79eef828c495d4fc31050e6b179c57d07d00367c'),
+  600000: util.revHex('000000000000624f06c69d3a9fe8d25e0a9030569128d63ad1b704bbb3059a16'),
+  800000: util.revHex('0000000000209b091d6519187be7c2ee205293f25f9f503f90027e25abf8b503'),
+  1000000: util.revHex('0000000000478e259a3eda2fafbeeb0106626f946347955e99278fe6cc848414'),
+  1050000: util.revHex('00000000001aa0b431dc7f8fa75179b8440bdb671db5ca79e1087faff00c19d8'),
+  1094000: util.revHex('000000000000004bd1cd7237679fd2c8a992bba837675c9da4269d135cab43dd'),
+  1112000: util.revHex('0000000000023216fd9377d50fcd45caaca5009a1837e021eb949d6a80a3384e'),
+  1138771: util.revHex('00000000004d7205e1f210dc0ea4cf2c4785ebb2cf9c806cd74f3e55bbdb5aea'),
+  1148771: util.revHex('00000000000003956aa841663139940fcb9fed8e6e96f30769907c0e2dd4171b'),
+  1158771: util.revHex('00000000229876beca70eecec33b2ccd59c2d13fe5500ec2a20af44a62649724'),
+  1168771: util.revHex('0000000028b5bc965010ed92b410784415c66da601314d879f135a54d8c3d599'),
+  1178771: util.revHex('00000000343dc349997425935030f281936ddd5d0f183f69712204e92e76354f')
+};
 
-bcctestnet.checkpointMap = {};
-
+bcctestnet.lastCheckpoint = 1112000;
 
 bcctestnet.halvingInterval = 210000;
 
@@ -51,7 +65,7 @@ bcctestnet.pow = {
 
 bcctestnet.block = {
   bip34height: 21111,
-  bip34hash: util.revHex('0000000023b3a96d3484e5abb3755c413e7d41500f8e2a5c3f0dd01299cd8ef8'),
+  bip34hash: 'f88ecd9912d00d3f5c2a8e0f50417d3e415c75b3abe584346da9b32300000000',
   bip65height: 581885,
   bip65hash: 'b61e864fbec41dfaf09da05d1d76dc068b0dd82ee7982ff255667f0000000000',
   bip66height: 330776,

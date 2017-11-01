@@ -2,7 +2,7 @@
 
 Middleware service for handling incoming transactions
 
-###Installation
+### Installation
 
 This module is a part of middleware services. You can install it in 2 ways:
 
@@ -77,6 +77,20 @@ The options are presented below:
 | BITCOIN_IPC   | ipc file name
 | BITCOIN_IPC_PATH   | directory, where to store ipc file (you can skip this option on windows)
 | BITCOIN_ETHERBASE | etherbase address (optional param)
+
+### supported networks
+
+The actual network could be set with BITCOIN_NETWORK param. All supported networks are presented below:
+
+| name | description|
+| ------ | ------ |
+| main   | bitcoin mainnet
+| testnet   | bitcoin testnet
+| bcc   | bitcoin cash mainnet
+| bcctest   | bitcoin cash testnet
+| btg   | bitcoin gold mainnet
+| btgtest   | bitcoin gold testnet
+
 
 License
 ----
