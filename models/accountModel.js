@@ -1,4 +1,5 @@
 const mongoose = require('mongoose'),
+  config = require('../config'),
   messages = require('../factories/messages/addressMessageFactory');
 
 /** @model accountModel
@@ -21,4 +22,4 @@ const Account = new mongoose.Schema({
   created: {type: Date, required: true, default: Date.now}
 });
 
-module.exports = mongoose.model('BitcoinAccount', Account);
+module.exports = mongoose.model(`${config.mongo.collectionPrefix}Account`, Account);
