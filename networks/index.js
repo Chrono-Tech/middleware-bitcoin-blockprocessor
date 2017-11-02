@@ -7,6 +7,14 @@ const requireAll = require('require-all'),
     recursive: true
   });
 
+/**
+ * @factory
+ * @description modify bcoin networks, by adding bcc and test bcc networks definitions
+ * specified routing key - i.e. event param
+ * @param currentNetworkType - network name
+ * @returns {Promise.<void>}
+ */
+
 module.exports = (currentNetworkType) => {
 
   let customNetwork = _.chain(networks)
@@ -15,7 +23,7 @@ module.exports = (currentNetworkType) => {
     .value();
 
   if (!customNetwork)
-  {return;}
+    return;
 
   bcoinNetworks.types = _.union([currentNetworkType], bcoinNetworks.types);
   bcoinNetworks[currentNetworkType] = customNetwork;

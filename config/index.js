@@ -5,19 +5,22 @@ const _ = require('lodash');
  * @factory config
  * @description base app's configuration
  * @returns {{
- *    mongo: {
- *      uri: (*)
- *      },
- *    rabbit: {
- *      url: (*)
- *      },
- *    bitcoin: {
- *      host: (*),
- *      port: (*),
- *      user: (*),
- *      pass: (*)
- *      }
- *    }}
+ *  mongo: {
+ *    uri: string
+ *    },
+ *  rabbit: {
+ *    url: string,
+ *    serviceName: string
+ *    },
+ *  bitcoin: {
+ *    dbpath: string,
+ *    network: string,
+ *    db: string,
+ *    ipcName: string,
+ *    ipcPath: string,
+ *    coinbase: [string]
+ *    }
+ *  }}
  */
 
 module.exports = {
