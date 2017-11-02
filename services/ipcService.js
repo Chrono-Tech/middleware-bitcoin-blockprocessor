@@ -6,8 +6,8 @@ const ipc = require('node-ipc'),
   RPCBase = require('bcoin/lib/http/rpcbase');
 
 Object.assign(ipc.config, {
-  id: config.bitcoin.ipcName,
-  socketRoot: config.bitcoin.ipcPath,
+  id: config.node.ipcName,
+  socketRoot: config.node.ipcPath,
   retry: 1500,
   maxConnections: 100,
   sync: false,
@@ -25,7 +25,7 @@ Object.assign(ipc.config, {
 
 const init = async node => {
 
-  let pathIpc = path.join(config.bitcoin.ipcPath, `${ipc.config.appspace}${config.bitcoin.ipcName}`);
+  let pathIpc = path.join(config.node.ipcPath, `${ipc.config.appspace}${config.node.ipcName}`);
 
   if (fs.existsSync(pathIpc)) {
     fs.unlinkSync(pathIpc);
@@ -35,7 +35,7 @@ const init = async node => {
   node.rpc.add('getcoinsbyaddress', async (...args) => {
     let coins = await node.getCoinsByAddress.bind(node)(...args);
     return coins.map(coin =>
-      coin.getJSON(config.bitcoin.network)
+      coin.getJSON(config.node.network)
     );
   });
   node.rpc.add('getmetabyaddress', node.getMetaByAddress.bind(node));
