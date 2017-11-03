@@ -41,7 +41,7 @@ bcctestnet.checkpointMap = {
   1178771: util.revHex('00000000343dc349997425935030f281936ddd5d0f183f69712204e92e76354f')
 };
 
-bcctestnet.lastCheckpoint = 1112000;
+bcctestnet.lastCheckpoint = 1178771;
 
 bcctestnet.halvingInterval = 210000;
 

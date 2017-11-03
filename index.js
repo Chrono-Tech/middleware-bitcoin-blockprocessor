@@ -72,7 +72,7 @@ const init = async function () {
     } catch (e) {
     }
 
-    setTimeout(() => node.startSync(), 60000);
+    setTimeout(() => node.startSync(), 60000 * 5);
   });
 
   node.on('connect', async (entry, block) => {
