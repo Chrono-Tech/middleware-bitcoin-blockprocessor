@@ -58,6 +58,7 @@ Below is the expamle configuration:
 ```
 MONGO_URI=mongodb://localhost:27017/data
 RABBIT_URI=amqp://localhost:5672
+RABBIT_SERVICE_NAME=app_bitcoin
 MONGO_COLLECTION_PREFIX=bitcoin
 NETWORK=regtest
 DB_DRIVER=leveldb
@@ -72,6 +73,7 @@ The options are presented below:
 | ------ | ------ |
 | MONGO_URI   | the URI string for mongo connection
 | RABBIT_URI   | rabbitmq URI connection string
+| RABBIT_SERVICE_NAME   | rabbitmq queues prefix
 | MONGO_COLLECTION_PREFIX   | the prefix name for all created collections, like for Account model - it will be called (in our case) bitcoinAccount
 | NETWORK   | network name (alias)- is used for connecting via ipc (regtest, main, testnet, bcc)
 | DB_DRIVER   | bitcoin database driver (leveldb or memory)

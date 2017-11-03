@@ -29,7 +29,7 @@ module.exports = {
   },
   rabbit: {
     url: process.env.RABBIT_URI || 'amqp://localhost:5672',
-    serviceName: process.env.RABBIT_SERVICE_NAME || 'app_bitcoin'
+    serviceName: process.env.RABBIT_SERVICE_NAME || 'bitcoin'
   },
   node: {
     dbpath: process.env.DB_PATH || '',
