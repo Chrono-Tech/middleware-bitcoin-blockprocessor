@@ -13,7 +13,7 @@ const _ = require('lodash'),
 
 module.exports = async block => {
 
-  let network = Network.get(config.bitcoin.network);
+  let network = Network.get(config.node.network);
 
   let addresses = _.chain(block.txs)
     .map(tx => {

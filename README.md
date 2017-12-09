@@ -10,15 +10,16 @@ This module is a part of middleware services. You can install it in 2 ways:
 2) by hands: just clone the repo, do 'npm install', set your .env - and you are ready to go
 
 #### About
-This module is used for updating balances for registered accounts (see a description of accounts in [block processor](https://github.com/ChronoBank/middleware-eth-blockprocessor)).
+This module is used for watching new blocks and txs for registered on platform users (please, check out - how you can register new user via [rest api](https://github.com/ChronoBank/middleware-bitcoin-rest)).
 
 
 #### How does it work?
 
 Block processor - is a full node. It process blocks
-from the specified network, and notify users about new incoming blocks and transactions
+from the specified network, and notify users about new incoming blocks and transactions.
 
-Why do we use rabbitmq?
+#### Why do we use rabbitmq?
+
 
 
 Rabbitmq is used for 2 main reasons - the first one for inner communication between different core modules. And the second one - is for notification purpose. When a new transaction arrives and it satisfies the filter - block processor notiffy others about it though rabbitmq exhange strategy. The exnage is called 'events', and it has different kinds of routing keys. For a new tx the routing key is looked like so:
@@ -37,7 +38,7 @@ Also you can listen to new blocs:
 
 And even, you can subscribe to all bitcoin_transactions events by using wildcard:
 ```
-bitcoin_transaction.*
+<rabbitmq_service_name>_transaction.*
 ```
 
 All in all, in order to be subscribed, you need to do the following:
@@ -55,14 +56,15 @@ To apply your configuration, create a .env file in root folder of repo (in case 
 Below is the expamle configuration:
 
 ```
-MONGO_URI=mongodb://localhost:32772/data
-RABBIT_URI=amqp://localhost:32769
-BITCOIN_NETWORK=regtest
-BITCOIN_DB=leveldb
-BITCOIN_DB_PATH=./db
-BITCOIN_IPC=bitcoin
-BITCOIN_IPC_PATH=/tmp/
-BITCOIN_ETHERBASE=RXjwE6pvdFoR9m81KZKZVotZpn4j1SLrvH
+MONGO_URI=mongodb://localhost:27017/data
+RABBIT_URI=amqp://localhost:5672
+RABBIT_SERVICE_NAME=app_bitcoin
+MONGO_COLLECTION_PREFIX=bitcoin
+NETWORK=regtest
+DB_DRIVER=leveldb
+DB_PATH=./db
+IPC_NAME=bitcoin
+IPC_PATH=/tmp/
 ```
 
 The options are presented below:
@@ -71,21 +73,23 @@ The options are presented below:
 | ------ | ------ |
 | MONGO_URI   | the URI string for mongo connection
 | RABBIT_URI   | rabbitmq URI connection string
-| BITCOIN_NETWORK   | network name (alias)- is used for connecting via ipc (regtest, main, testnet, bcc)
-| BITCOIN_DB   | bitcoin database driver (leveldb or memory)
-| BITCOIN_DB_PATH   | path where to store db (with memory db you can skip this option)
-| BITCOIN_IPC   | ipc file name
-| BITCOIN_IPC_PATH   | directory, where to store ipc file (you can skip this option on windows)
-| BITCOIN_ETHERBASE | etherbase address (optional param)
+| RABBIT_SERVICE_NAME   | rabbitmq queues prefix
+| MONGO_COLLECTION_PREFIX   | the prefix name for all created collections, like for Account model - it will be called (in our case) bitcoinAccount
+| NETWORK   | network name (alias)- is used for connecting via ipc (regtest, main, testnet, bcc)
+| DB_DRIVER   | bitcoin database driver (leveldb or memory)
+| DB_PATH   | path where to store db (with memory db you can skip this option)
+| IPC_NAME   | ipc file name
+| IPC_PATH   | directory, where to store ipc file (you can skip this option on windows)
 
 ### supported networks
 
-The actual network could be set with BITCOIN_NETWORK param. All supported networks are presented below:
+The actual network could be set with NETWORK param. All supported networks are presented below:
 
 | name | description|
 | ------ | ------ |
 | main   | bitcoin mainnet
 | testnet   | bitcoin testnet
+| regtest   | bitcoin regtest network
 | bcc   | bitcoin cash mainnet
 | bcctest   | bitcoin cash testnet
 | btg   | bitcoin gold mainnet

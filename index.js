@@ -16,17 +16,16 @@ const bcoin = require('bcoin'),
  * services about new block or tx, where we meet registered address
  */
 
-customNetworkRegistrator(config.bitcoin.network);
+customNetworkRegistrator(config.node.network);
 
 const node = new bcoin.fullnode({
-  network: config.bitcoin.network,
-  db: config.bitcoin.db,
-  prefix: config.bitcoin.dbpath,
+  network: config.node.network,
+  db: config.node.dbDriver,
+  prefix: config.node.dbpath,
   spv: true,
   indexTX: true,
   indexAddress: true,
-  'log-level': 'debug',
-  'coinbase-address': config.bitcoin.coinbase
+  'log-level': 'info'
 });
 
 mongoose.Promise = Promise;
@@ -73,7 +72,7 @@ const init = async function () {
     } catch (e) {
     }
 
-    setTimeout(() => node.startSync(), 60000);
+    setTimeout(() => node.startSync(), 60000 * 5);
   });
 
   node.on('connect', async (entry, block) => {
@@ -92,6 +91,10 @@ const init = async function () {
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
     ));
+  });
+
+  node.on('error', err=>{
+    log.error(err);
   });
 
   ipcService(node);
