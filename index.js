@@ -86,14 +86,14 @@ const init = async function () {
 
   });
 
-  node.on('pushed_tx', async (tx) => { //custom event, which fires on tx push via rest module
-    let filtered = await filterAccountsService({txs: [TX.fromRaw(tx, 'hex')]});
+  node.pool.on('tx', async (tx) => {
+    let filtered = await filterAccountsService({txs: [tx]});
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
     ));
   });
 
-  node.on('error', err=>{
+  node.on('error', err => {
     log.error(err);
   });
 
