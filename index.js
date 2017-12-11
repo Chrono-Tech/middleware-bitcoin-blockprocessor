@@ -5,7 +5,6 @@ const bcoin = require('bcoin'),
   amqp = require('amqplib'),
   memwatch = require('memwatch-next'),
   bunyan = require('bunyan'),
-  TX = require('bcoin/lib/primitives/tx'),
   customNetworkRegistrator = require('./networks'),
   log = bunyan.createLogger({name: 'core.blockProcessor'}),
   config = require('./config');
