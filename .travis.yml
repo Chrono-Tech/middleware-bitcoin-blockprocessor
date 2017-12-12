@@ -29,6 +29,21 @@ after_script:
   - pm2 logs --nostream
   - pm2 kill && pkill PM2
 
+after_success:
+  - FULL_GCR_KEY="-----BEGIN PRIVATE KEY-----\n"$GCR_KEY"\n-----END PRIVATE KEY-----\n"
+  - sed -i -e "s%\PWD%$FULL_GCR_KEY%g" gcregistry.json
+  - docker login -u _json_key -p "$(cat gcregistry.json)" https://gcr.io
+  - rm -rf gcregistry.json
+  - |
+    if [ "$TRAVIS_TAG" == "" ]; then
+      IMAGE_TAG_NAME="latest"
+    elif [ "$TRAVIS_TAG" != "" ]; then
+      IMAGE_TAG_NAME="develop"
+    fi;
+  - docker build --quiet -t gcr.io/deep-wares-144610/middleware-bitcoin:$IMAGE_TAG_NAME .
+  - docker push gcr.io/deep-wares-144610/middleware-bitcoin:$IMAGE_TAG_NAME
+
+
 notifications:
   email: false
 
