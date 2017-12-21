@@ -24,8 +24,10 @@ require('dotenv').config();
 
 module.exports = {
   mongo: {
-    uri: process.env.MONGO_URI || 'mongodb://localhost:27017/data',
-    collectionPrefix: process.env.MONGO_COLLECTION_PREFIX || 'bitcoin'
+    accounts: {
+      uri: process.env.MONGO_ACCOUNTS_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/data',
+      collectionPrefix: process.env.MONGO_COLLECTION_PREFIX || 'bitcoin'
+    }
   },
   rabbit: {
     url: process.env.RABBIT_URI || 'amqp://localhost:5672',
