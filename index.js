@@ -27,8 +27,9 @@ const node = new bcoin.fullnode({
   'log-level': 'info'
 });
 
+
 mongoose.Promise = Promise;
-mongoose.connect(config.mongo.uri, {useMongoClient: true});
+mongoose.connect(config.mongo.accounts.uri, {useMongoClient: true});
 
 mongoose.connection.on('disconnected', function () {
   log.error('mongo disconnected!');
