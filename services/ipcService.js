@@ -2,7 +2,6 @@ const ipc = require('node-ipc'),
   config = require('../config'),
   path = require('path'),
   fs = require('fs'),
-  _ = require('lodash'),
   RPCBase = require('bcoin/lib/http/rpcbase');
 
 Object.assign(ipc.config, {
@@ -31,9 +30,20 @@ const init = async node => {
     fs.unlinkSync(pathIpc);
   }
 
-  node.rpc.add('gettxbyaddress', node.getTXByAddress.bind(node));
+  node.rpc.add('gettxbyaddress', async (...args) => {
+    const metas = await node.getMetaByAddress(...args);
+    const result = [];
+
+    for (const meta of metas) {
+      const view = await node.getMetaView(meta);
+      result.push(meta.getJSON(config.node.network, view));
+    }
+
+    return result;
+  });
+
   node.rpc.add('getcoinsbyaddress', async (...args) => {
-    let coins = await node.getCoinsByAddress.bind(node)(...args);
+    let coins = await node.getCoinsByAddress(...args);
     return coins.map(coin =>
       coin.getJSON(config.node.network)
     );
@@ -41,7 +51,6 @@ const init = async node => {
   node.rpc.add('getmetabyaddress', node.getMetaByAddress.bind(node));
 
   node.rpc.add('sendrawtransactionnotify', (...args) => {
-    node.emit('pushed_tx', _.get(args, '0.0'));
     return node.rpc.sendRawTransaction.call(node.rpc, ...args);
   });
 
