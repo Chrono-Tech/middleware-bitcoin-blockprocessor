@@ -6,7 +6,7 @@ RUN apt update && \
     npm install -g pm2@2.7.1 && \
     mkdir /app
 WORKDIR /app
-RUN npm install -g chronobank-middleware
+RUN npm install -g chronobank-middleware --unsafe
 RUN mkdir src && cd src && \
     dmt init && \
     dmt install middleware-bitcoin-blockprocessor \
