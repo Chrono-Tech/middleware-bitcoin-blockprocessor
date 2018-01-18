@@ -2,6 +2,8 @@ const ipc = require('node-ipc'),
   config = require('../config'),
   path = require('path'),
   fs = require('fs'),
+  _ = require('lodash'),
+  Promise = require('bluebird'),
   RPCBase = require('bcoin/lib/http/rpcbase');
 
 Object.assign(ipc.config, {
@@ -48,32 +50,88 @@ const init = async node => {
       coin.getJSON(config.node.network)
     );
   });
-  node.rpc.add('getmetabyaddress', node.getMetaByAddress.bind(node));
 
-  node.rpc.add('sendrawtransactionnotify', (...args) => {
-    return node.rpc.sendRawTransaction.call(node.rpc, ...args);
-  });
+  node.rpc.add('getblockrangetxbyaddress', async (...args) => {
+    args = args[0];
+    const address = args[0];
+    const delta = args[1];
 
-  ipc.serve(() => {
-    ipc.server.on('message', async (data, socket) => {
-      try {
-        data = JSON.parse(data);
-        const json = await node.rpc.execute(data);
+    console.log(address);
+    const height = await node.rpc.getBlockCount([]);
 
-        ipc.server.emit(socket, 'message', {result: json, id: data.id});
-      } catch (e) {
-        ipc.server.emit(socket, 'message', {
-          result: null,
-          error: {
-            message: 'Invalid request.',
-            code: RPCBase.errors.INVALID_REQUEST
-          }
-        }
-        );
+    let lastBlocks = await Promise.mapSeries(_.map(new Array(delta), (item, iter) => iter), async (iter) => {
+      return await node.rpc.getBlockByHeight([height - iter]);
+    });
+
+    let txs = _.chain(lastBlocks)
+      .map(block => block.tx)
+      .flattenDeep()
+      .value();
+
+    let lastTxs = await Promise.mapSeries(txs, async (txid) => {
+      let tx = await node.rpc.getRawTransaction([txid, true]);
+
+      tx.vin = _.filter(tx.vin, vin => vin.vout);
+
+      tx.inputs = await Promise.mapSeries(tx.vin, async vin => {
+        let tx = await node.rpc.getRawTransaction([txid, true]);
+        return tx.vout[vin.vout];
+      });
+
+      tx.inputs = _.compact(tx.inputs);
+
+      tx.outputs = tx.vout.map(v => ({
+        value: Math.floor(v.value * Math.pow(10, 8)),
+        scriptPubKey: v.scriptPubKey,
+        addresses: v.scriptPubKey.addresses
+      }));
+
+      for (let i = 0; i < tx.inputs.length; i++) {
+        tx.inputs[i] = {
+          addresses: tx.inputs[i].scriptPubKey.addresses,
+          prev_hash: tx.vin[i].txid, //eslint-disable-line
+          script: tx.inputs[i].scriptPubKey,
+          value: Math.floor(tx.inputs[i].value * Math.pow(10, 8)),
+          output_index: tx.vin[i].vout //eslint-disable-line
+        };
       }
 
+
+      let inout = _.chain([tx.inputs, tx.outputs])
+        .flattenDeep()
+        .find(inout=>  _.get(inout, 'addresses', []).includes(address))
+        .value();
+
+      return inout ? tx : null;
     });
-  }
+
+    return _.compact(lastTxs);
+
+  });
+
+  node.rpc.add('getmetabyaddress', node.getMetaByAddress.bind(node));
+
+  ipc.serve(() => {
+      ipc.server.on('message', async (data, socket) => {
+        try {
+          data = JSON.parse(data);
+          const json = await node.rpc.execute(data);
+
+          ipc.server.emit(socket, 'message', {result: json, id: data.id});
+        } catch (e) {
+          console.log(e)
+          ipc.server.emit(socket, 'message', {
+              result: null,
+              error: {
+                message: 'Invalid request.',
+                code: RPCBase.errors.INVALID_REQUEST
+              }
+            }
+          );
+        }
+
+      });
+    }
   );
 
   ipc.server.start();
