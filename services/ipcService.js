@@ -56,10 +56,9 @@ const init = async node => {
     const address = args[0];
     const delta = args[1];
 
-    console.log(address);
     const height = await node.rpc.getBlockCount([]);
 
-    let lastBlocks = await Promise.mapSeries(_.map(new Array(delta), (item, iter) => iter), async (iter) => {
+    let lastBlocks = await Promise.map(_.map(new Array(delta), (item, iter) => iter), async (iter) => {
       return await node.rpc.getBlockByHeight([height - iter]);
     });
 
@@ -68,13 +67,13 @@ const init = async node => {
       .flattenDeep()
       .value();
 
-    let lastTxs = await Promise.mapSeries(txs, async (txid) => {
+    let lastTxs = await Promise.map(txs, async (txid) => {
       let tx = await node.rpc.getRawTransaction([txid, true]);
 
       tx.vin = _.filter(tx.vin, vin => vin.vout);
 
-      tx.inputs = await Promise.mapSeries(tx.vin, async vin => {
-        let tx = await node.rpc.getRawTransaction([txid, true]);
+      tx.inputs = await Promise.map(tx.vin, async vin => {
+        let tx = await node.rpc.getRawTransaction([vin.txid, true]);
         return tx.vout[vin.vout];
       });
 
@@ -97,12 +96,11 @@ const init = async node => {
       }
 
 
-      let inout = _.chain([tx.inputs, tx.outputs])
-        .flattenDeep()
-        .find(inout=>  _.get(inout, 'addresses', []).includes(address))
-        .value();
 
-      return inout ? tx : null;
+      let inputIncludes = _.find(tx.inputs, input=> _.get(input, 'addresses', []).includes(address));
+      let outputIncludes = _.find(tx.outputs, input=> _.get(input, 'addresses', []).includes(address));
+
+      return inputIncludes || outputIncludes ? tx : null;
     });
 
     return _.compact(lastTxs);
