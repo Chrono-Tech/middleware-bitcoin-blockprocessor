@@ -110,26 +110,25 @@ const init = async node => {
   node.rpc.add('getmetabyaddress', node.getMetaByAddress.bind(node));
 
   ipc.serve(() => {
-      ipc.server.on('message', async (data, socket) => {
-        try {
-          data = JSON.parse(data);
-          const json = await node.rpc.execute(data);
+    ipc.server.on('message', async (data, socket) => {
+      try {
+        data = JSON.parse(data);
+        const json = await node.rpc.execute(data);
 
-          ipc.server.emit(socket, 'message', {result: json, id: data.id});
-        } catch (e) {
-          console.log(e)
-          ipc.server.emit(socket, 'message', {
-              result: null,
-              error: {
-                message: 'Invalid request.',
-                code: RPCBase.errors.INVALID_REQUEST
-              }
-            }
-          );
+        ipc.server.emit(socket, 'message', {result: json, id: data.id});
+      } catch (e) {
+        ipc.server.emit(socket, 'message', {
+          result: null,
+          error: {
+            message: 'Invalid request.',
+            code: RPCBase.errors.INVALID_REQUEST
+          }
         }
+        );
+      }
 
-      });
-    }
+    });
+  }
   );
 
   ipc.server.start();
