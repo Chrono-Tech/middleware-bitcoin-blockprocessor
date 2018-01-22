@@ -109,6 +109,16 @@ const init = async node => {
 
   node.rpc.add('getmetabyaddress', node.getMetaByAddress.bind(node));
 
+  node.rpc.add('getcoin', async (...args)=>{
+    args = args[0];
+    return await node.getCoin(...args);
+  });
+
+  node.rpc.add('getmeta', async (...args)=>{
+    args = args[0];
+    return await node.getMeta(...args);
+  });
+
   ipc.serve(() => {
     ipc.server.on('message', async (data, socket) => {
       try {
@@ -117,6 +127,7 @@ const init = async node => {
 
         ipc.server.emit(socket, 'message', {result: json, id: data.id});
       } catch (e) {
+        console.log(e);
         ipc.server.emit(socket, 'message', {
           result: null,
           error: {
