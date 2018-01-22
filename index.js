@@ -24,9 +24,10 @@ const node = new bcoin.fullnode({
   spv: true,
   indexTX: true,
   indexAddress: true,
+  coinCache: 30000000,
+  cacheSize: 1024,
   'log-level': 'info'
 });
-
 
 mongoose.Promise = Promise;
 mongoose.connect(config.mongo.accounts.uri, {useMongoClient: true});
