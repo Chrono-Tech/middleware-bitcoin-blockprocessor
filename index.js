@@ -24,9 +24,9 @@ const node = new bcoin.fullnode({
   spv: true,
   indexTX: true,
   indexAddress: true,
-  coinCache: 30000000,
-  cacheSize: 1024,
-  'log-level': 'info'
+  coinCache: config.node.coinCache,
+  cacheSize: config.node.cacheSize,
+  logLevel: 'info'
 });
 
 mongoose.Promise = Promise;
