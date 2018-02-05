@@ -28,26 +28,33 @@ module.exports = async block => {
     .value();
 
   let filteredByChunks = await Promise.all(addresses.map(chunk =>
-    accountModel.find({address: {$in: chunk}})
+    accountModel.find({
+      address: {
+        $in: chunk
+      },
+      isActive: {
+        $ne: false
+      }
+    })
   ));
 
   return _.chain(filteredByChunks)
     .flattenDeep()
     .map(account => ({
-      address: account.address,
-      txs: _.chain(block.txs)
-        .filter(tx => {
-          tx = tx.getJSON(network);
-          return _.chain(tx.inputs)
-            .union(tx.outputs)
-            .flattenDeep()
-            .map(i => (i.address || '').toString())
-            .includes(account.address)
-            .value();
-        })
-        .map(tx => tx.toJSON().hash)
-        .value()
-    })
+        address: account.address,
+        txs: _.chain(block.txs)
+          .filter(tx => {
+            tx = tx.getJSON(network);
+            return _.chain(tx.inputs)
+              .union(tx.outputs)
+              .flattenDeep()
+              .map(i => (i.address || '').toString())
+              .includes(account.address)
+              .value();
+          })
+          .map(tx => tx.toJSON().hash)
+          .value()
+      })
     )
     .value();
 
