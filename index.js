@@ -1,13 +1,20 @@
+const mongoose = require('mongoose'),
+  config = require('./config'),
+  Promise = require('bluebird');
+
+mongoose.Promise = Promise;
+mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
+mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
+
 const bcoin = require('bcoin'),
-  filterAccountsService = require('./services/filterAccountsService'),
+  filterAccountsService = require('./services/filterTxsByAccountsService'),
   ipcService = require('./services/ipcService'),
-  mongoose = require('mongoose'),
   amqp = require('amqplib'),
   memwatch = require('memwatch-next'),
   bunyan = require('bunyan'),
   customNetworkRegistrator = require('./networks'),
-  log = bunyan.createLogger({name: 'core.blockProcessor'}),
-  config = require('./config');
+  blockCacheService = require('./services/blockCacheService'),
+  log = bunyan.createLogger({name: 'core.blockProcessor'});
 
 /**
  * @module entry point
@@ -21,21 +28,22 @@ const node = new bcoin.fullnode({
   network: config.node.network,
   db: config.node.dbDriver,
   prefix: config.node.dbpath,
-  spv: true,
+  spv: false,
   indexTX: true,
   indexAddress: true,
   coinCache: config.node.coinCache,
   cacheSize: config.node.cacheSize,
-  logLevel: 'info'
+  logLevel: 'error'
 });
 
-mongoose.Promise = Promise;
-mongoose.connect(config.mongo.accounts.uri, {useMongoClient: true});
+const cacheService = new blockCacheService(node);
 
-mongoose.connection.on('disconnected', function () {
-  log.error('mongo disconnected!');
-  process.exit(0);
-});
+[mongoose.accounts, mongoose.connection].forEach(connection =>
+  connection.on('disconnected', function () {
+    log.error('mongo disconnected!');
+    process.exit(0);
+  })
+);
 
 const init = async function () {
   let amqpConn = await amqp.connect(config.rabbit.url)
@@ -61,6 +69,8 @@ const init = async function () {
   await node.open();
   await node.connect();
 
+  await cacheService.startSync();
+
   memwatch.on('leak', () => {
     log.info('leak');
 
@@ -76,19 +86,18 @@ const init = async function () {
     setTimeout(() => node.startSync(), 60000 * 5);
   });
 
-  node.on('connect', async (entry, block) => {
-    log.info('%s (%d) added to chain.', entry.rhash(), entry.height);
-    await channel.publish('events', `${config.rabbit.serviceName}_block`, new Buffer(JSON.stringify({block: entry.height})));
-    let filtered = await filterAccountsService(block);
-
+  cacheService.events.on('block', async block => {
+    let filtered = await filterAccountsService(block.txs);
     await Promise.all(filtered.map(item =>
-      channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: entry.height}))))
+      channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: block.number}))))
     ));
-
   });
 
   node.pool.on('tx', async (tx) => {
-    let filtered = await filterAccountsService({txs: [tx]});
+    if (!await cacheService.isSynced())
+      return;
+
+    let filtered = await filterAccountsService([tx]);
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
     ));
