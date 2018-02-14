@@ -11,11 +11,11 @@ const _ = require('lodash'),
  */
 
 
-module.exports = async block => {
+module.exports = async txs => {
 
   let network = Network.get(config.node.network);
 
-  let addresses = _.chain(block.txs)
+  let addresses = _.chain(txs)
     .map(tx => {
       tx = tx.getJSON(network);
       return _.union(tx.inputs, tx.outputs);
@@ -35,7 +35,7 @@ module.exports = async block => {
     .flattenDeep()
     .map(account => ({
       address: account.address,
-      txs: _.chain(block.txs)
+      txs: _.chain(txs)
         .filter(tx => {
           tx = tx.getJSON(network);
           return _.chain(tx.inputs)
