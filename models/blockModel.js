@@ -10,6 +10,7 @@ const mongoose = require('mongoose'),
 const Block = new mongoose.Schema({
   number: {type: Number, unique: true, index: true},
   hash: {type: String, unique: true, index: true},
+  timestamp: {type: Number, required: true, index: true},
   txs: [{
     value: {type: String},
     hash: {type: String, index: true},

@@ -123,8 +123,9 @@ class BlockCacheService {
     return {
       network: config.node.network,
       number: this.currentHeight,
-      hash: hash,
-      txs: txs
+      hash: block.rhash(),
+      txs: txs,
+      timestamp: block.time,
     };
   }
 

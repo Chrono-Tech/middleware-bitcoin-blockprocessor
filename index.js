@@ -33,7 +33,7 @@ const node = new bcoin.fullnode({
   indexAddress: true,
   coinCache: config.node.coinCache,
   cacheSize: config.node.cacheSize,
-  logLevel: 'error'
+  logLevel: 'info'
 });
 
 const cacheService = new blockCacheService(node);
@@ -71,7 +71,7 @@ const init = async function () {
 
   await cacheService.startSync();
 
-  memwatch.on('leak', () => {
+  memwatch.on('leak', async () => {
     log.info('leak');
 
     if (!node.pool.syncing) {
@@ -79,14 +79,24 @@ const init = async function () {
     }
 
     try {
-      node.stopSync();
+      await node.stopSync();
+      await cacheService.stopSync();
     } catch (e) {
     }
 
-    setTimeout(() => node.startSync(), 60000 * 5);
+    await Promise.delay(6000);
+    await node.startSync();
+    await cacheService.startSync();
+
   });
 
+  node.on('connect', async (entry) => {
+    log.info('%s (%d) added to chain.', entry.rhash(), entry.height);
+  });
+
+
   cacheService.events.on('block', async block => {
+    log.info('%s (%d) added to cache.', block.hash, block.number);
     let filtered = await filterAccountsService(block.txs);
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: block.number}))))
