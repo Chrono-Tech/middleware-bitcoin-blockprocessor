@@ -2,8 +2,6 @@ const ipc = require('node-ipc'),
   config = require('../config'),
   path = require('path'),
   fs = require('fs'),
-  _ = require('lodash'),
-  Promise = require('bluebird'),
   RPCBase = require('bcoin/lib/http/rpcbase');
 
 Object.assign(ipc.config, {

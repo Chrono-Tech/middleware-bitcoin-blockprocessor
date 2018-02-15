@@ -14,9 +14,10 @@ module.exports = async (method, params) => {
     maxRetries: 3
   });
 
-  await new Promise(res => {
+  await new Promise((res, rej) => {
     ipc.connectTo(config.node.ipcName, () => {
       ipc.of[config.node.ipcName].on('connect', res);
+      ipc.of[config.node.ipcName].on('disconnect', ()=>rej(new Error('CONNECTION ERROR')));
     });
   });
 

@@ -4,7 +4,6 @@ const config = require('../config'),
   Network = require('bcoin/lib/protocol/network'),
   bcoin = require('bcoin'),
   expect = require('chai').expect,
-  accountModel = require('../models/accountModel'),
   ipcExec = require('./helpers/ipcExec'),
   _ = require('lodash'),
   ctx = {
