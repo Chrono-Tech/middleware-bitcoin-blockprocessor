@@ -26,12 +26,19 @@ class BlockCacheService {
   }
 
   async startSync () {
+    if (this.isSyncing)
+      return;
+
     await this.indexCollection();
     this.isSyncing = true;
     const currentBlocks = await blockModel.find({network: config.node.network}).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
     this.currentHeight = _.chain(currentBlocks).get('0.number', -1).add(1).value();
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
     this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).compact().reverse().value();
+    this.doJob();
+  }
+
+  async doJob () {
 
     while (this.isSyncing) {
       try {
@@ -59,6 +66,7 @@ class BlockCacheService {
 
       }
     }
+
   }
 
   async stopSync () {
@@ -127,7 +135,6 @@ class BlockCacheService {
   }
 
   async isSynced () {
-    console.log('called')
     const tip = await this.node.chain.db.getTip();
     return this.currentHeight >= tip.height - config.consensus.lastBlocksValidateAmount;
   }
