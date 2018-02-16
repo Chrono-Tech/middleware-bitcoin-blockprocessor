@@ -12,13 +12,10 @@ const Block = new mongoose.Schema({
   hash: {type: String, unique: true, index: true},
   timestamp: {type: Number, required: true, index: true},
   txs: [{
-    value: {type: String},
     hash: {type: String, index: true},
-    fee: {type: String},
-    minFee: {type: String},
     inputs: [{
       prevout:  {
-        hash: {type: String},
+        hash: {type: String, index: true},
         index: {type: Number}
       },
       value: {type: String},
