@@ -33,6 +33,11 @@ class BlockCacheService {
 
     await this.indexCollection();
     this.isSyncing = true;
+
+    const mempool = await this.node.rpc.getRawMempool([]);
+    if (!mempool.length)
+      await blockModel.remove({number: -1});
+
     const currentBlocks = await blockModel.find({
       network: config.node.network,
       timestamp: {$ne: 0}
@@ -89,9 +94,8 @@ class BlockCacheService {
         txs: []
       };
 
-
     const fullTx = await transformToFullTx(this.node, tx);
-    let alreadyIncludedTxs = _.filter(mempool, txHash => _.find(currentUnconfirmedBlock.txs, {hash: txHash}));
+    let alreadyIncludedTxs = _.filter(currentUnconfirmedBlock.txs, tx => mempool.includes(tx.hash));
     currentUnconfirmedBlock.txs = _.union(alreadyIncludedTxs, [fullTx]);
     await blockModel.findOneAndUpdate({number: -1}, currentUnconfirmedBlock, {upsert: true});
   }
