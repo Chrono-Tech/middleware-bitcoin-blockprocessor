@@ -6,6 +6,8 @@ const config = require('../config'),
   EventEmitter = require('events'),
   log = bunyan.createLogger({name: 'app.services.blockCacheService'}),
   Network = require('bcoin/lib/protocol/network'),
+  transformToFullTx = require('../utils/transformToFullTx'),
+  TX = require('bcoin/lib/primitives/tx'),
   network = Network.get(config.node.network);
 
 /**
@@ -31,11 +33,16 @@ class BlockCacheService {
 
     await this.indexCollection();
     this.isSyncing = true;
-    const currentBlocks = await blockModel.find({network: config.node.network}).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
+    const currentBlocks = await blockModel.find({
+      network: config.node.network,
+      timestamp: {$ne: 0}
+    }).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
     this.currentHeight = _.chain(currentBlocks).get('0.number', -1).add(1).value();
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
     this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).compact().reverse().value();
     this.doJob();
+    this.node.pool.on('tx', tx => this.UnconfirmedTxEvent(tx));
+
   }
 
   async doJob () {
@@ -51,7 +58,7 @@ class BlockCacheService {
       } catch (err) {
 
         if (err.code === 0) {
-          log.info(`await for next block ${this.currentHeight + 1}`);
+          log.info(`await for next block ${this.currentHeight}`);
           await Promise.delay(10000);
         }
 
@@ -59,7 +66,10 @@ class BlockCacheService {
           let lastCheckpointBlock = await blockModel.findOne({hash: this.lastBlocks[0]});
           log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
           await blockModel.remove({hash: {$in: this.lastBlocks}});
-          const currentBlocks = await blockModel.find({network: config.node.network}).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
+          const currentBlocks = await blockModel.find({
+            network: config.node.network,
+            timestamp: {$ne: 0}
+          }).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
           this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).reverse().value();
           this.currentHeight = lastCheckpointBlock - 1;
         }
@@ -69,8 +79,26 @@ class BlockCacheService {
 
   }
 
+  async UnconfirmedTxEvent (tx) {
+
+    const mempool = await this.node.rpc.getRawMempool([]);
+    let currentUnconfirmedBlock = await blockModel.findOne({number: -1}) || {
+        number: -1,
+        hash: null,
+        timestamp: 0,
+        txs: []
+      };
+
+
+    const fullTx = await transformToFullTx(this.node, tx);
+    let alreadyIncludedTxs = _.filter(mempool, txHash => _.find(currentUnconfirmedBlock.txs, {hash: txHash}));
+    currentUnconfirmedBlock.txs = _.union(alreadyIncludedTxs, [fullTx]);
+    await blockModel.findOneAndUpdate({number: -1}, currentUnconfirmedBlock, {upsert: true});
+  }
+
   async stopSync () {
     this.isSyncing = false;
+    this.node.pool.removeListener('tx', this.UnconfirmedTxEvent);
   }
 
   async processBlock () {
@@ -87,38 +115,7 @@ class BlockCacheService {
 
     let block = await this.node.chain.db.getBlock(hash);
 
-    const txs = await Promise.map(block.txs, async tx => {
-      tx = tx.getJSON(network);
-      const inputs = await Promise.mapSeries(tx.inputs, async input => {
-
-        if (!input.address)
-          return;
-
-        const txInputs = await this.node.rpc.getRawTransaction([input.prevout.hash, true]);
-
-        if (!_.has(txInputs, `vout.${input.prevout.index}`))
-          return;
-
-        input = _.get(txInputs, `vout.${input.prevout.index}`);
-        return {
-          address: input.address,
-          value: input.value * Math.pow(10, 8)
-        };
-      }, {concurrency: 4});
-
-      return {
-        value: tx.value,
-        hash: tx.hash,
-        fee: tx.fee,
-        minFee: tx.minFee,
-        inputs: _.compact(inputs),
-        outputs: tx.outputs.map(output => ({
-          address: output.address,
-          value: output.value
-        }))
-      };
-
-    }, {concurrency: 4});
+    const txs = await Promise.map(block.txs, async tx => await Promise.resolve(transformToFullTx(this.node, tx)).delay(0), {concurrency: 4});
 
     return {
       network: config.node.network,
