@@ -12,6 +12,7 @@ const bcoin = require('bcoin'),
   amqp = require('amqplib'),
   memwatch = require('memwatch-next'),
   bunyan = require('bunyan'),
+  transformToFullTx = require('./utils/transformToFullTx'),
   customNetworkRegistrator = require('./networks'),
   blockCacheService = require('./services/blockCacheService'),
   log = bunyan.createLogger({name: 'core.blockProcessor'});
@@ -71,17 +72,17 @@ const init = async function () {
 
   await cacheService.startSync();
 
-  memwatch.on('leak', async () => {
-    log.info('leak');
+  memwatch.on('leak', async (info) => {
+    log.info('leak', info);
 
-    if (!node.pool.syncing) {
+    if (!node.pool.syncing)
       return;
-    }
 
     try {
       await node.stopSync();
       await cacheService.stopSync();
     } catch (e) {
+
     }
 
     await Promise.delay(6000);
@@ -93,7 +94,6 @@ const init = async function () {
   node.on('connect', async (entry) => {
     log.info('%s (%d) added to chain.', entry.rhash(), entry.height);
   });
-
 
   cacheService.events.on('block', async block => {
     log.info('%s (%d) added to cache.', block.hash, block.number);
@@ -107,7 +107,8 @@ const init = async function () {
     if (!await cacheService.isSynced())
       return;
 
-    let filtered = await filterAccountsService([tx]);
+    const fullTx = await transformToFullTx(node, tx);
+    let filtered = await filterAccountsService([fullTx]);
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
     ));
