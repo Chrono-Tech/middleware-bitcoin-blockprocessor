@@ -5,10 +5,7 @@ const config = require('../config'),
   blockModel = require('../models/blockModel'),
   EventEmitter = require('events'),
   log = bunyan.createLogger({name: 'app.services.blockCacheService'}),
-  Network = require('bcoin/lib/protocol/network'),
-  transformToFullTx = require('../utils/transformToFullTx'),
-  TX = require('bcoin/lib/primitives/tx'),
-  network = Network.get(config.node.network);
+  transformToFullTx = require('../utils/transformToFullTx');
 
 /**
  * @service
@@ -25,6 +22,7 @@ class BlockCacheService {
     this.currentHeight = 0;
     this.lastBlocks = [];
     this.isSyncing = false;
+    this.pendingTxCallback = (err, tx) => this.UnconfirmedTxEvent(err, tx);
   }
 
   async startSync () {
@@ -46,7 +44,7 @@ class BlockCacheService {
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
     this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).compact().reverse().value();
     this.doJob();
-    this.node.pool.on('tx', tx => this.UnconfirmedTxEvent(tx));
+    this.node.pool.on('tx', this.pendingTxCallback);
 
   }
 
@@ -56,6 +54,16 @@ class BlockCacheService {
       try {
         let block = await this.processBlock();
         await blockModel.findOneAndUpdate({number: block.number}, block, {upsert: true});
+        await blockModel.update({number: -1}, {
+          $pull: {
+            txs: {
+              hash: {
+                $in: block.txs.map(tx => tx.hash)
+              }
+            }
+          }
+        });
+
         this.currentHeight++;
         _.pullAt(this.lastBlocks, 0);
         this.lastBlocks.push(block.hash);
@@ -88,11 +96,11 @@ class BlockCacheService {
 
     const mempool = await this.node.rpc.getRawMempool([]);
     let currentUnconfirmedBlock = await blockModel.findOne({number: -1}) || {
-        number: -1,
-        hash: null,
-        timestamp: 0,
-        txs: []
-      };
+      number: -1,
+      hash: null,
+      timestamp: 0,
+      txs: []
+    };
 
     const fullTx = await transformToFullTx(this.node, tx);
     let alreadyIncludedTxs = _.filter(currentUnconfirmedBlock.txs, tx => mempool.includes(tx.hash));
@@ -102,7 +110,7 @@ class BlockCacheService {
 
   async stopSync () {
     this.isSyncing = false;
-    this.node.pool.removeListener('tx', this.UnconfirmedTxEvent);
+    this.node.pool.removeListener('tx', this.pendingTxCallback);
   }
 
   async processBlock () {
