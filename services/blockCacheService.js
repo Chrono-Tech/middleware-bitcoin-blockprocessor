@@ -5,7 +5,7 @@ const config = require('../config'),
   blockModel = require('../models/blockModel'),
   EventEmitter = require('events'),
   log = bunyan.createLogger({name: 'app.services.blockCacheService'}),
-  transformToFullTx = require('../utils/transformToFullTx');
+  transformBlockTxs = require('../utils/transformBlockTxs');
 
 /**
  * @service
@@ -108,7 +108,7 @@ class BlockCacheService {
         txs: []
       };
 
-    const fullTx = await transformToFullTx(this.node, tx, true);
+    const fullTx = await transformBlockTxs(this.node, [tx]);
     let alreadyIncludedTxs = _.filter(currentUnconfirmedBlock.txs, tx => mempool.includes(tx.hash));
     currentUnconfirmedBlock.txs = _.union(alreadyIncludedTxs, [fullTx]);
     await blockModel.findOneAndUpdate({number: -1}, currentUnconfirmedBlock, {upsert: true});
@@ -133,7 +133,7 @@ class BlockCacheService {
 
     let block = await this.node.chain.db.getBlock(hash);
 
-    const txs = await Promise.mapSeries(block.txs, async tx => await transformToFullTx(this.node, tx, false, block.txs));
+    const txs = await transformBlockTxs(this.node, block.txs);
 
     return {
       network: config.node.network,

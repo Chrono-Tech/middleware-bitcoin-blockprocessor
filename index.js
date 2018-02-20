@@ -12,7 +12,7 @@ const bcoin = require('bcoin'),
   amqp = require('amqplib'),
   memwatch = require('memwatch-next'),
   bunyan = require('bunyan'),
-  transformToFullTx = require('./utils/transformToFullTx'),
+  transformBlockTxs = require('./utils/transformBlockTxs'),
   customNetworkRegistrator = require('./networks'),
   blockCacheService = require('./services/blockCacheService'),
   log = bunyan.createLogger({name: 'core.blockProcessor'});
@@ -107,7 +107,7 @@ const init = async function () {
     if (!await cacheService.isSynced())
       return;
 
-    const fullTx = await transformToFullTx(node, tx, true);
+    const fullTx = (await transformBlockTxs(node, [tx]))[0];
     let filtered = await filterAccountsService([fullTx]);
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
