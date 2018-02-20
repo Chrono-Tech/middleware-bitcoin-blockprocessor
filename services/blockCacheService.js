@@ -133,7 +133,7 @@ class BlockCacheService {
 
     let block = await this.node.chain.db.getBlock(hash);
 
-    const txs = await Promise.map(block.txs, async tx => await transformToFullTx(this.node, tx), {concurrency: 4});
+    const txs = await Promise.mapSeries(block.txs, async tx => await transformToFullTx(this.node, tx, false, block.txs));
 
     return {
       network: config.node.network,

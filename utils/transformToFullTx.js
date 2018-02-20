@@ -14,8 +14,9 @@ const _ = require('lodash'),
  */
 
 
-module.exports = async (node, tx, unconfirmed = false) => {
+module.exports = async (node, tx, unconfirmed = false, uncachedTxs = []) => {
 
+  uncachedTxs = uncachedTxs.map(tx=> tx.getJSON(network));
   tx = tx.getJSON(network);
 
   let fetchedInputs = _.chain(tx).get('inputs', []).map(input => _.get(input, 'prevout.hash')).compact().value();
@@ -25,12 +26,13 @@ module.exports = async (node, tx, unconfirmed = false) => {
     {$match: {'txs.hash': {$in: fetchedInputs}}},
     {$group: {_id: 'a', txs: {$addToSet: '$txs'}}}
   ]);
-  fetchedInputs = _.get(fetchedInputs, '0.txs', []);
+  fetchedInputs = _.chain(fetchedInputs).get('0.txs', []).union(uncachedTxs).value();
 
-  let inputs = await Promise.map(tx.inputs, async input => {
+  let inputs = await Promise.all(
+    tx.inputs.map(async input => {
 
     let txValue = 0;
-    if (!_.has(input, 'prevout.hash') || !_.has(input, 'prevout.index'))
+    if (!_.has(input, 'prevout.hash') || !_.has(input, 'prevout.index') || !input.address)
       return {
         prevout: input.prevout,
         address: input.address,
@@ -40,6 +42,7 @@ module.exports = async (node, tx, unconfirmed = false) => {
     const fetchedInput = _.find(fetchedInputs, {hash: input.prevout.hash});
 
     if (!fetchedInput) {
+      console.log(input);
       const tx = await node.rpc.getRawTransaction([input.prevout.hash, true]).catch(() => null);
       if (!tx)
         return {
@@ -53,8 +56,6 @@ module.exports = async (node, tx, unconfirmed = false) => {
         const height = tip.height - tx.confirmations;
         const currentBlock = await blockModel.findOne({height: {$gt: height}});
         if (currentBlock) {
-          console.log(tx.hash)
-          console.log(currentBlock.number);
           return Promise.reject({code: 1, block: {height: height}});
         }
       }
@@ -69,7 +70,7 @@ module.exports = async (node, tx, unconfirmed = false) => {
       address: input.address,
       value: txValue
     };
-  }, {concurrency: 4});
+  }));
 
   inputs = _.chain(tx.inputs)
     .map(txInput =>
