@@ -5,7 +5,7 @@ const config = require('../config'),
   blockModel = require('../models/blockModel'),
   EventEmitter = require('events'),
   log = bunyan.createLogger({name: 'app.services.blockCacheService'}),
-  transformToFullTx = require('../utils/transformToFullTx');
+  transformBlockTxs = require('../utils/transformBlockTxs');
 
 /**
  * @service
@@ -72,21 +72,24 @@ class BlockCacheService {
 
         if (err.code === 0) {
           log.info(`await for next block ${this.currentHeight}`);
-          await Promise.delay(10000);
+          return await Promise.delay(10000);
         }
 
         if (_.get(err, 'code') === 1) {
-          let lastCheckpointBlock = await blockModel.findOne({hash: this.lastBlocks[0]});
+          let lastCheckpointBlock = err.block || await blockModel.findOne({hash: this.lastBlocks[0]});
           log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
           await blockModel.remove({hash: {$in: this.lastBlocks}});
           const currentBlocks = await blockModel.find({
             network: config.node.network,
-            timestamp: {$ne: 0}
+            timestamp: {$ne: 0},
+            number: {$lt: lastCheckpointBlock.number}
           }).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
           this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).reverse().value();
-          this.currentHeight = lastCheckpointBlock - 1;
+          this.currentHeight = lastCheckpointBlock.number - 1;
+          return;
         }
 
+        log.error(err);
       }
     }
 
@@ -94,15 +97,18 @@ class BlockCacheService {
 
   async UnconfirmedTxEvent (tx) {
 
+    if (!await this.isSynced())
+      return;
+
     const mempool = await this.node.rpc.getRawMempool([]);
     let currentUnconfirmedBlock = await blockModel.findOne({number: -1}) || {
-      number: -1,
-      hash: null,
-      timestamp: 0,
-      txs: []
-    };
+        number: -1,
+        hash: null,
+        timestamp: 0,
+        txs: []
+      };
 
-    const fullTx = await transformToFullTx(this.node, tx);
+    const fullTx = await transformBlockTxs(this.node, [tx]);
     let alreadyIncludedTxs = _.filter(currentUnconfirmedBlock.txs, tx => mempool.includes(tx.hash));
     currentUnconfirmedBlock.txs = _.union(alreadyIncludedTxs, [fullTx]);
     await blockModel.findOneAndUpdate({number: -1}, currentUnconfirmedBlock, {upsert: true});
@@ -127,7 +133,7 @@ class BlockCacheService {
 
     let block = await this.node.chain.db.getBlock(hash);
 
-    const txs = await Promise.map(block.txs, async tx => await Promise.resolve(transformToFullTx(this.node, tx)).delay(0), {concurrency: 4});
+    const txs = await transformBlockTxs(this.node, block.txs);
 
     return {
       network: config.node.network,

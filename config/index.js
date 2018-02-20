@@ -48,6 +48,6 @@ module.exports = {
     ipcPath: process.env.IPC_PATH || '/tmp/',
     cacheSize: process.env.CACHE_SIZE ? parseInt(process.env.CACHE_SIZE) : 1024,
     coinCache: process.env.COIN_SIZE ? parseInt(process.env.COIN_SIZE) : 30000000,
-
+    gcTimeOut: process.env.GC_TIME_OUT ? parseInt(process.env.GC_TIME_OUT) : 60000 * 5,
   }
 };
