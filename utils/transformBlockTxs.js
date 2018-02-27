@@ -24,15 +24,19 @@ module.exports = async (node, txs) => {
     .map(input => _.get(input, 'prevout.hash'))
     .compact()
     .uniq()
+    .chunk(50)
     .value();
 
-  fetchedInputs = await blockModel.aggregate([
-    {$match: {'txs.hash': {$in: fetchedInputs}}},
-    {$unwind: '$txs'},
-    {$match: {'txs.hash': {$in: fetchedInputs}}},
-    {$group: {_id: 'a', txs: {$addToSet: '$txs'}}}
-  ]);
-  fetchedInputs = _.chain(fetchedInputs).get('0.txs', []).union(txs).value();
+  fetchedInputs = await Promise.mapSeries(fetchedInputs, async inputs =>
+    await blockModel.aggregate([
+      {$match: {'txs.hash': {$in: inputs}}},
+      {$unwind: '$txs'},
+      {$match: {'txs.hash': {$in: inputs}}},
+      {$group: {_id: 'a', txs: {$addToSet: '$txs'}}}
+    ]));
+
+  fetchedInputs = _.chain(fetchedInputs).map(inputs=>_.get(inputs, '0.txs', [])).flattenDeep().value();
+  fetchedInputs = _.union(fetchedInputs, txs);
 
   return await Promise.map(txs, async tx => {
 
