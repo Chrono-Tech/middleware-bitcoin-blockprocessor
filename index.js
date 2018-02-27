@@ -7,7 +7,7 @@ mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
 mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
 
 const bcoin = require('bcoin'),
-  filterAccountsService = require('./services/filterTxsByAccountsService'),
+  filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   ipcService = require('./services/ipcService'),
   amqp = require('amqplib'),
   memwatch = require('memwatch-next'),
@@ -97,7 +97,7 @@ const init = async function () {
 
   cacheService.events.on('block', async block => {
     log.info('%s (%d) added to cache.', block.hash, block.number);
-    let filtered = await filterAccountsService(block.txs);
+    let filtered = await filterTxsByAccountsService(block.txs);
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: block.number}))))
     ));
@@ -108,7 +108,7 @@ const init = async function () {
       return;
 
     const fullTx = (await transformBlockTxs(node, [tx]))[0];
-    let filtered = await filterAccountsService([fullTx]);
+    let filtered = await filterTxsByAccountsService([fullTx]);
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
     ));

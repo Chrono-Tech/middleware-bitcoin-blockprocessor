@@ -18,11 +18,11 @@ const Block = new mongoose.Schema({
         hash: {type: String, index: true},
         index: {type: Number}
       },
-      value: {type: String},
+      value: {type: Number},
       address: {type: String, index: true}
     }],
     outputs: [{
-      value: {type: String},
+      value: {type: Number},
       address: {type: String, index: true}
     }]
   }],

@@ -140,7 +140,7 @@ class BlockCacheService {
       number: this.currentHeight,
       hash: block.rhash(),
       txs: txs,
-      timestamp: block.time,
+      timestamp: block.time || Date.now(),
     };
   }
 
