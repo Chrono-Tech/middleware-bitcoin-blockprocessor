@@ -53,6 +53,7 @@ class BlockCacheService {
     while (this.isSyncing) {
       try {
         let block = await this.processBlock();
+        await this.processUTXO(block);
         await blockModel.findOneAndUpdate({number: block.number}, block, {upsert: true});
         await blockModel.update({number: -1}, {
           $pull: {
@@ -72,13 +73,28 @@ class BlockCacheService {
 
         if (err.code === 0) {
           log.info(`await for next block ${this.currentHeight}`);
-          return await Promise.delay(10000);
+          await Promise.delay(10000);
         }
 
         if (_.get(err, 'code') === 1) {
           let lastCheckpointBlock = err.block || await blockModel.findOne({hash: this.lastBlocks[0]});
           log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
-          await blockModel.remove({hash: {$in: this.lastBlocks}});
+          const blocksToDelete = await blockModel.find({
+            $or: [
+              {hash: {$in: this.lastBlocks}},
+              {number: {$gte: lastCheckpointBlock.number}}
+            ]
+          });
+
+          for (let block of blocksToDelete)
+            await this.processUTXO(block, true);
+
+          await blockModel.remove({
+            $or: [
+              {hash: {$in: this.lastBlocks}},
+              {number: {$gte: lastCheckpointBlock.number}}
+            ]
+          });
           const currentBlocks = await blockModel.find({
             network: config.node.network,
             timestamp: {$ne: 0},
@@ -86,10 +102,10 @@ class BlockCacheService {
           }).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
           this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).reverse().value();
           this.currentHeight = lastCheckpointBlock.number - 1;
-          return;
         }
 
-        log.error(err);
+        if (![0, 1].includes(_.get(err, 'code')))
+          log.error(err);
       }
     }
 
@@ -128,7 +144,13 @@ class BlockCacheService {
 
     const lastBlockHashes = await Promise.mapSeries(this.lastBlocks, async blockHash => await this.node.chain.db.getHash(blockHash));
 
-    if (_.compact(lastBlockHashes).length !== this.lastBlocks.length)
+    let savedBlocks = await blockModel.find({hash: {$in: lastBlockHashes}}, {number: 1}).limit(this.lastBlocks.length);
+    savedBlocks = _.chain(savedBlocks).map(block => block.number).orderBy().value();
+
+    const validatedBlocks = _.filter(savedBlocks, (s, i) => s === i + savedBlocks[0]);
+
+    if (_.compact(lastBlockHashes).length !== this.lastBlocks.length || savedBlocks.length !== this.lastBlocks.length ||
+      validatedBlocks.length !== this.lastBlocks.length)
       return Promise.reject({code: 1}); //head has been blown off
 
     let block = await this.node.chain.db.getBlock(hash);
@@ -142,6 +164,21 @@ class BlockCacheService {
       txs: txs,
       timestamp: block.time || Date.now(),
     };
+  }
+
+  async processUTXO (block, fallback = false) {
+
+    const inputs = _.chain(block.txs)
+      .map(tx => tx.inputs)
+      .flattenDeep()
+      .map(input => input.prevout)
+      .value();
+
+    return await Promise.all(inputs.map(async input =>
+        await blockModel.update({'txs.hash': input.hash}, {$set: {[`txs.$.outputs.${input.index}.spent`]: !fallback}})
+      )
+    )
+
   }
 
   async indexCollection () {
