@@ -23,7 +23,8 @@ const Block = new mongoose.Schema({
     }],
     outputs: [{
       value: {type: Number},
-      address: {type: String, index: true}
+      address: {type: String, index: true},
+      spent: {type: Boolean, index: true, default: false}
     }]
   }],
   network: {type: String},
