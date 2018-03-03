@@ -24,7 +24,7 @@ module.exports = async (node, txs) => {
     .map(input => _.get(input, 'prevout.hash'))
     .compact()
     .uniq()
-    .chunk(200)
+    .chunk(50)
     .value();
 
   fetchedInputs = await Promise.map(fetchedInputs, async inputs =>
