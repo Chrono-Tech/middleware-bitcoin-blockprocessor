@@ -24,55 +24,51 @@ module.exports = async (node, txs) => {
     .map(input => _.get(input, 'prevout.hash'))
     .compact()
     .uniq()
-    .chunk(50)
+    .chunk(200)
     .value();
 
-  fetchedInputs = await Promise.mapSeries(fetchedInputs, async inputs =>
+  fetchedInputs = await Promise.map(fetchedInputs, async inputs =>
     await blockModel.aggregate([
       {$match: {'txs.hash': {$in: inputs}}},
       {$unwind: '$txs'},
       {$match: {'txs.hash': {$in: inputs}}},
       {$group: {_id: 'a', txs: {$addToSet: '$txs'}}}
-    ]));
+    ]), {concurrency: 4});
 
-  fetchedInputs = _.chain(fetchedInputs).map(inputs=>_.get(inputs, '0.txs', [])).flattenDeep().value();
+  fetchedInputs = _.chain(fetchedInputs).map(inputs => _.get(inputs, '0.txs', [])).flattenDeep().value();
   fetchedInputs = _.union(fetchedInputs, txs);
 
   return await Promise.map(txs, async tx => {
 
-    let inputs = await Promise.all(
-      tx.inputs.map(async input => {
+    let inputs = await Promise.map(tx.inputs, async input => {
 
-        let txValue = 0;
-        if (!_.has(input, 'prevout.hash') || !_.has(input, 'prevout.index') || !input.address)
-          return {
-            prevout: input.prevout,
-            address: input.address,
-            value: txValue
-          };
-
-        const fetchedInput = _.find(fetchedInputs, {hash: input.prevout.hash});
-
-        if (!fetchedInput) {
-          const tx = await node.rpc.getRawTransaction([input.prevout.hash, true]).catch(() => null);
-          if (!tx)
-            return {
-              prevout: input.prevout,
-              address: input.address,
-              value: 0
-            };
-
-          txValue = _.get(tx, `vout.${input.prevout.index}.value`, 0) * Math.pow(10, 8);
-        } else {
-          txValue = _.get(fetchedInput, `outputs.${input.prevout.index}.value`, 0);
-        }
-
+      if (!_.has(input, 'prevout.hash') || !_.has(input, 'prevout.index') || !input.address)
         return {
           prevout: input.prevout,
           address: input.address,
-          value: txValue
+          value: 0
         };
-      }));
+
+      const fetchedInput = _.find(fetchedInputs, {hash: input.prevout.hash});
+
+      if (!fetchedInput) {
+        const tx = await node.rpc.getRawTransaction([input.prevout.hash, true]).catch(() => null);
+        if (!tx)
+          return null;
+
+        const block = await node.rpc.getBlock([tx.blockhash]).catch(() => null);
+        return {block: {number: block.height}};
+      }
+
+      return {
+        prevout: input.prevout,
+        address: input.address,
+        value: _.get(fetchedInput, `outputs.${input.prevout.index}.value`, 0)
+      };
+    });
+
+    if (inputs.includes(null) || _.find(inputs, input=>_.has(input, 'block.number')))
+      return Promise.reject({code: 1});
 
     inputs = _.chain(tx.inputs)
       .map(txInput =>
@@ -92,6 +88,6 @@ module.exports = async (node, txs) => {
       }))
     };
 
-  });
+  })
 
 };
