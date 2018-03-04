@@ -99,10 +99,19 @@ class BlockCacheService {
     const inputs = _.chain(block.txs)
       .map(tx => tx.inputs)
       .flattenDeep()
-      .map(input => ({
+      .groupBy('prevout.hash')
+      .toPairs()
+      .map(pair => ({
         updateOne: {
-          filter: {'txs.hash': input.prevout.hash},
-          update: {$set: {[`txs.$.outputs.${input.prevout.index}.spent`]: true}}
+          filter: {'txs.hash': pair[0]},
+          update: {
+            $set: _.chain(pair[1])
+              .map(input =>
+                [`txs.$.outputs.${input.prevout.index}.spent`, true]
+              )
+              .fromPairs()
+              .value()
+          }
         }
       }))
       .union([
@@ -129,9 +138,10 @@ class BlockCacheService {
         }
 
       ])
+      .chunk(50)
       .value();
 
-    return await blockModel.bulkWrite(inputs);
+    await Promise.map(inputs, async input => await blockModel.bulkWrite(input, {ordered: false}), {concurrency: 4});
 
   }
 
@@ -167,9 +177,11 @@ class BlockCacheService {
           }
         }
       ])
+      .chunk(20)
       .value();
 
-    return await blockModel.bulkWrite(inputs);
+    for (let input of inputs)
+      await blockModel.bulkWrite(input);
 
   }
 
