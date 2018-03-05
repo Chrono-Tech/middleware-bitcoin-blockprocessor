@@ -199,17 +199,17 @@ class BlockCacheService {
       return;
 
     const mempool = await this.node.rpc.getRawMempool([]);
-    let currentUnconfirmedBlock = await blockModel.findOne({number: -1}) || {
+    let currentUnconfirmedBlock = await blockModel.findOne({number: -1}) || new blockModel({
         number: -1,
         hash: null,
         timestamp: 0,
         txs: []
-      };
+      });
 
     const fullTx = await transformBlockTxs(this.node, [tx]);
     let alreadyIncludedTxs = _.filter(currentUnconfirmedBlock.txs, tx => mempool.includes(tx.hash));
     currentUnconfirmedBlock.txs = _.union(alreadyIncludedTxs, fullTx);
-    await blockModel.findOneAndUpdate({number: -1}, currentUnconfirmedBlock, {upsert: true});
+    await blockModel.findOneAndUpdate({number: -1}, _.omit(currentUnconfirmedBlock.toObject(), '_id', '__v'), {upsert: true});
   }
 
   async stopSync () {
