@@ -159,10 +159,19 @@ class BlockCacheService {
       .flattenDeep()
       .map(tx => tx.inputs)
       .flattenDeep()
-      .map(input => ({
+      .groupBy('prevout.hash')
+      .toPairs()
+      .map(pair => ({
         updateOne: {
-          filter: {'txs.hash': input.prevout.hash},
-          update: {$set: {[`txs.$.outputs.${input.prevout.index}.spent`]: false}}
+          filter: {'txs.hash': pair[0]},
+          update: {
+            $set: _.chain(pair[1])
+              .map(input =>
+                [`txs.$.outputs.${input.prevout.index}.spent`, false]
+              )
+              .fromPairs()
+              .value()
+          }
         }
       }))
       .union([
@@ -177,11 +186,10 @@ class BlockCacheService {
           }
         }
       ])
-      .chunk(20)
+      .chunk(50)
       .value();
 
-    for (let input of inputs)
-      await blockModel.bulkWrite(input);
+    await Promise.map(inputs, async input => await blockModel.bulkWrite(input, {ordered: false}), {concurrency: 4});
 
   }
 
@@ -200,7 +208,7 @@ class BlockCacheService {
 
     const fullTx = await transformBlockTxs(this.node, [tx]);
     let alreadyIncludedTxs = _.filter(currentUnconfirmedBlock.txs, tx => mempool.includes(tx.hash));
-    currentUnconfirmedBlock.txs = _.union(alreadyIncludedTxs, [fullTx]);
+    currentUnconfirmedBlock.txs = _.union(alreadyIncludedTxs, fullTx);
     await blockModel.findOneAndUpdate({number: -1}, currentUnconfirmedBlock, {upsert: true});
   }
 
