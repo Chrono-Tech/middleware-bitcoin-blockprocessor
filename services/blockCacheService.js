@@ -55,7 +55,7 @@ class BlockCacheService {
     while (this.isSyncing) {
       try {
         this.isLocked = true;
-        let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
+        let block = await this.processBlock();
         await this.updateDbStateWithBlock(block);
 
         this.currentHeight++;
@@ -138,10 +138,20 @@ class BlockCacheService {
         }
 
       ])
-      .chunk(50)
       .value();
 
-    await Promise.map(inputs, async input => await blockModel.bulkWrite(input, {ordered: false}), {concurrency: 4});
+    log.info('updating utxos for block: ', block.number);
+    log.info('total records to be updated: ', inputs.length);
+
+    const chunks = _.chunk(inputs, 50);
+
+    await Promise.mapSeries(chunks, async (input, index) => {
+      await blockModel.bulkWrite(input, {ordered: false});
+      const percent = _.chain(chunks).take(index + 1)
+        .flattenDeep().size().divide(inputs.length)
+        .multiply(100).floor().value();
+      log.info(`processed utxo: ${percent}%`);
+    });
 
   }
 

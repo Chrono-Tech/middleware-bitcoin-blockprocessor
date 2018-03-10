@@ -3,6 +3,8 @@ const _ = require('lodash'),
   Promise = require('bluebird'),
   Network = require('bcoin/lib/protocol/network'),
   blockModel = require('../models/blockModel'),
+  bunyan = require('bunyan'),
+  log = bunyan.createLogger({name: 'app.services.blockCacheService'}),
   network = Network.get(config.node.network);
 
 /**
@@ -23,14 +25,15 @@ module.exports = async (node, txs) => {
     .flattenDeep()
     .map(input => _.get(input, 'prevout'))
     .compact()
-    .uniq()
-    .chunk(200)
     .value();
 
+  const chunks = _.chunk(prevouts, 50);
 
-  let fetchedPrevOuts = await Promise.map(prevouts, async prevoutSet => {
+  log.info(`fetching prevouts with total amount: ${prevouts.length}`);
+
+  let fetchedPrevOuts = await Promise.map(chunks, async (prevoutSet, index) => {
     let hashes = prevoutSet.map(prev => prev.hash);
-    return await blockModel.aggregate([
+    let result = await blockModel.aggregate([
       {$match: {'txs.hash': {$in: hashes}}},
       {$unwind: '$txs'},
       {$match: {'txs.hash': {$in: hashes}}},
@@ -69,11 +72,25 @@ module.exports = async (node, txs) => {
         }
       },
       {$unwind: '$outputs'},
-      {$group: {_id: 'a', outputs: {$addToSet: '$outputs'}}}
-    ])
+      //{$group: {_id: 'a', outputs: {$addToSet: '$outputs'}}}
+    ]);
+
+
+    result = _.chain(result)
+      .map(item=> item.outputs)
+      .uniqWith(_.isEqual)
+      .value();
+
+    const percent = _.chain(chunks).take(index + 1)
+      .flattenDeep().size().divide(prevouts.length)
+      .multiply(100).floor().value();
+    log.info(`processed prevouts: ${percent}%`);
+
+    return result;
+
   }, {concurrency: 4});
 
-  fetchedPrevOuts = _.chain(fetchedPrevOuts).map(prev=>_.get(prev, '0.outputs', [])).flattenDeep().value();
+  fetchedPrevOuts = _.flattenDeep(fetchedPrevOuts);
 
   const currentOuts = _.chain(txs)
     .map(tx =>
@@ -102,6 +119,8 @@ module.exports = async (node, txs) => {
       const fetchedPrevOut = _.find(fetchedPrevOuts, {hash: input.prevout.hash, index: input.prevout.index});
 
       if (!fetchedPrevOut) {
+        console.log('!!');
+        process.exit(0);
         const tx = await node.rpc.getRawTransaction([input.prevout.hash, true]).catch(() => null);
         if (!tx)
           return null;
