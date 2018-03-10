@@ -31,7 +31,8 @@ module.exports = async (node, txs) => {
 
   log.info(`fetching prevouts with total amount: ${prevouts.length}`);
 
-  let fetchedPrevOuts = await Promise.map(chunks, async (prevoutSet, index) => {
+  let prevOutsProcessed = 0;
+  let fetchedPrevOuts = await Promise.mapSeries(chunks, async (prevoutSet, index) => {
     let hashes = prevoutSet.map(prev => prev.hash);
     let result = await blockModel.aggregate([
       {$match: {'txs.hash': {$in: hashes}}},
@@ -72,7 +73,6 @@ module.exports = async (node, txs) => {
         }
       },
       {$unwind: '$outputs'},
-      //{$group: {_id: 'a', outputs: {$addToSet: '$outputs'}}}
     ]);
 
 
@@ -81,13 +81,10 @@ module.exports = async (node, txs) => {
       .uniqWith(_.isEqual)
       .value();
 
-    const percent = _.chain(chunks).take(index + 1)
-      .flattenDeep().size().divide(prevouts.length)
-      .multiply(100).floor().value();
-    log.info(`processed prevouts: ${percent}%`);
+    prevOutsProcessed += prevoutSet.length;
+    log.info(`processed prevouts: ${prevOutsProcessed / prevouts.length * 100}%`);
 
     return result;
-
   }, {concurrency: 4});
 
   fetchedPrevOuts = _.flattenDeep(fetchedPrevOuts);
@@ -119,8 +116,6 @@ module.exports = async (node, txs) => {
       const fetchedPrevOut = _.find(fetchedPrevOuts, {hash: input.prevout.hash, index: input.prevout.index});
 
       if (!fetchedPrevOut) {
-        console.log('!!');
-        process.exit(0);
         const tx = await node.rpc.getRawTransaction([input.prevout.hash, true]).catch(() => null);
         if (!tx)
           return null;
@@ -145,16 +140,24 @@ module.exports = async (node, txs) => {
       )
       .value();
 
+    tx.outputs = await Promise.map(tx.outputs, async (output, index)=>{
+
+      const coin = await node.rpc.getTXOut([tx.hash, index, true]).catch(() => null);
+
+      return {
+        address: output.address,
+        value: output.value,
+        spent: !coin
+      };
+    });
+
     return {
       value: tx.value,
       hash: tx.hash,
       fee: tx.fee,
       minFee: tx.minFee,
       inputs: _.compact(inputs),
-      outputs: tx.outputs.map(output => ({
-        address: output.address,
-        value: output.value
-      }))
+      outputs: tx.outputs
     };
 
   })
