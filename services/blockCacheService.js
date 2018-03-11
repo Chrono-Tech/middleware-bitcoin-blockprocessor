@@ -72,6 +72,7 @@ class BlockCacheService {
         _.pullAt(this.lastBlocks, 0);
         this.lastBlocks.push(block.hash);
         this.events.emit('block', block);
+        await Promise.delay(500);
         this.isLocked = false;
       } catch (err) {
 
