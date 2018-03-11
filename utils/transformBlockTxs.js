@@ -18,7 +18,7 @@ module.exports = async (node, txs) => {
   txs = txs.map(tx => tx.getJSON(network));
 
   return await Promise.map(txs, async tx => {
-    tx.outputs = await Promise.map(tx.outputs, async (output, index)=>{
+    tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index)=>{
       const coin = await node.rpc.getTXOut([tx.hash, index, true]).catch(() => null);
       return {
         address: output.address,
