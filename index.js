@@ -85,7 +85,7 @@ const init = async function () {
 
     }
 
-    await Promise.delay(config.node.gcTimeOut);
+    await Promise.delay(node.network.pow.targetSpacing * 1000 / 2);
     await node.startSync();
     await cacheService.startSync();
 

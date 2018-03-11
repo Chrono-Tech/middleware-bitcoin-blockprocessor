@@ -2,9 +2,6 @@ const _ = require('lodash'),
   config = require('../config'),
   Promise = require('bluebird'),
   Network = require('bcoin/lib/protocol/network'),
-  blockModel = require('../models/blockModel'),
-  bunyan = require('bunyan'),
-  log = bunyan.createLogger({name: 'app.services.blockCacheService'}),
   network = Network.get(config.node.network);
 
 /**

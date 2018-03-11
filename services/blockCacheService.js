@@ -61,7 +61,7 @@ class BlockCacheService {
     while (this.isSyncing) {
       try {
 
-        if(!(await this.isCheckpointReached()))
+        if (!(await this.isCheckpointReached()))
           await Promise.reject({code: 2});
 
         this.isLocked = true;
@@ -95,14 +95,12 @@ class BlockCacheService {
 
         }
 
-
         if (err.code === 2) {
           log.info(`await until blockchain will be synced till last checkpoint at height ${this.checkpointHeight}`);
           await Promise.delay(10000);
         }
 
-
-        if (![0, 1].includes(_.get(err, 'code')))
+        if (![0, 1, 2].includes(_.get(err, 'code')))
           log.error(err);
 
         this.isLocked = false;
@@ -169,15 +167,13 @@ class BlockCacheService {
 
     const chunks = _.chunk(inputs, 50);
 
-    await Promise.mapSeries(chunks, async (input, index) => {
-          await blockModel.bulkWrite(input, {ordered: false});
-
-          const percent = _.chain(chunks).take(index + 1)
-            .flattenDeep().size().divide(inputs.length)
-            .multiply(100).floor().value();
-          log.info(`processed utxo: ${percent}%`);
-        }
-      );
+    let processed = 0;
+    await Promise.mapSeries(chunks, async input => {
+        await blockModel.bulkWrite(input, {ordered: false});
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
+      }
+    );
   }
 
   async rollbackStateFromBlock (block) {
@@ -221,10 +217,20 @@ class BlockCacheService {
           }
         }
       ])
-      .chunk(50)
       .value();
 
-    await Promise.map(inputs, async input => await blockModel.bulkWrite(input, {ordered: false}), {concurrency: 4});
+    log.info('rollback utxos from block: ', block.number);
+    log.info('total records to be updated: ', inputs.length);
+
+    const chunks = _.chunk(inputs, 50);
+
+    let processed = 0;
+    await Promise.mapSeries(chunks, async input => {
+        await blockModel.bulkWrite(input, {ordered: false});
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
+      }
+    );
 
   }
 
