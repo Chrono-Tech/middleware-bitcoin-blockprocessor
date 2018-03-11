@@ -65,14 +65,13 @@ class BlockCacheService {
           await Promise.reject({code: 2});
 
         this.isLocked = true;
-        let block = await this.processBlock();
+        let block = await Promise.resolve(this.processBlock()).timeout(60000 * 2);
         await this.updateDbStateWithBlock(block);
 
         this.currentHeight++;
         _.pullAt(this.lastBlocks, 0);
         this.lastBlocks.push(block.hash);
         this.events.emit('block', block);
-        await Promise.delay(500);
         this.isLocked = false;
       } catch (err) {
 
