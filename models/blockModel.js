@@ -16,9 +16,8 @@ const Block = new mongoose.Schema({
     inputs: [{
       prevout:  {
         hash: {type: String, index: true},
-        index: {type: Number}
+        index: {type: Number, index: true}
       },
-      value: {type: Number},
       address: {type: String, index: true}
     }],
     outputs: [{
