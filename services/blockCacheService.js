@@ -18,6 +18,12 @@ class BlockCacheService {
 
   constructor (node) {
     this.node = node;
+    this.checkpointHeight = _.chain(this.node.network.checkpointMap)
+      .keys()
+      .last()
+      .parseInt()
+      .value();
+
     this.isLocked = false;
     this.events = new EventEmitter();
     this.currentHeight = 0;
@@ -54,8 +60,12 @@ class BlockCacheService {
 
     while (this.isSyncing) {
       try {
+
+        if (!(await this.isCheckpointReached()))
+          await Promise.reject({code: 2});
+
         this.isLocked = true;
-        let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
+        let block = await this.processBlock();
         await this.updateDbStateWithBlock(block);
 
         this.currentHeight++;
@@ -85,7 +95,12 @@ class BlockCacheService {
 
         }
 
-        if (![0, 1].includes(_.get(err, 'code')))
+        if (err.code === 2) {
+          log.info(`await until blockchain will be synced till last checkpoint at height ${this.checkpointHeight}`);
+          await Promise.delay(10000);
+        }
+
+        if (![0, 1, 2].includes(_.get(err, 'code')))
           log.error(err);
 
         this.isLocked = false;
@@ -103,7 +118,14 @@ class BlockCacheService {
       .toPairs()
       .map(pair => ({
         updateOne: {
-          filter: {'txs.hash': pair[0]},
+          filter: {
+            'txs.hash': pair[0], $or: _.chain(pair[1])
+              .map(input => (
+                  {[`txs.$.outputs.${input.prevout.index}.spent`]: false}
+                )
+              )
+              .value()
+          },
           update: {
             $set: _.chain(pair[1])
               .map(input =>
@@ -138,11 +160,20 @@ class BlockCacheService {
         }
 
       ])
-      .chunk(50)
       .value();
 
-    await Promise.map(inputs, async input => await blockModel.bulkWrite(input, {ordered: false}), {concurrency: 4});
+    log.info('updating utxos for block: ', block.number);
+    log.info('total records to be updated: ', inputs.length);
 
+    const chunks = _.chunk(inputs, 50);
+
+    let processed = 0;
+    await Promise.mapSeries(chunks, async input => {
+        await blockModel.bulkWrite(input, {ordered: false});
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
+      }
+    );
   }
 
   async rollbackStateFromBlock (block) {
@@ -186,10 +217,20 @@ class BlockCacheService {
           }
         }
       ])
-      .chunk(50)
       .value();
 
-    await Promise.map(inputs, async input => await blockModel.bulkWrite(input, {ordered: false}), {concurrency: 4});
+    log.info('rollback utxos from block: ', block.number);
+    log.info('total records to be updated: ', inputs.length);
+
+    const chunks = _.chunk(inputs, 50);
+
+    let processed = 0;
+    await Promise.mapSeries(chunks, async input => {
+        await blockModel.bulkWrite(input, {ordered: false});
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
+      }
+    );
 
   }
 
@@ -199,7 +240,8 @@ class BlockCacheService {
       return;
 
     const mempool = await this.node.rpc.getRawMempool([]);
-    let currentUnconfirmedBlock = await blockModel.findOne({number: -1}) || new blockModel({
+    let currentUnconfirmedBlock = await
+        blockModel.findOne({number: -1}) || new blockModel({
         number: -1,
         hash: null,
         timestamp: 0,
@@ -256,6 +298,11 @@ class BlockCacheService {
   async isSynced () {
     const tip = await this.node.chain.db.getTip();
     return this.currentHeight >= tip.height - config.consensus.lastBlocksValidateAmount;
+  }
+
+  async isCheckpointReached () {
+    const tip = await this.node.chain.db.getTip();
+    return this.checkpointHeight <= tip.height;
   }
 
 }
