@@ -82,7 +82,7 @@ class BlockCacheService {
           await Promise.delay(10000);
         }
 
-        if (_.get(err, 'code') === 1) {
+        if ([1, 11000].includes(_.get(err, 'code'))) {
           let lastCheckpointBlock = err.block || await blockModel.findOne({hash: this.lastBlocks[0]});
           log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
 
