@@ -10,6 +10,7 @@ const bcoin = require('bcoin'),
   filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   ipcService = require('./services/ipcService'),
   amqp = require('amqplib'),
+  _ = require('lodash'),
   memwatch = require('memwatch-next'),
   bunyan = require('bunyan'),
   transformBlockTxs = require('./utils/transformBlockTxs'),
@@ -69,30 +70,39 @@ const init = async function () {
 
   await node.open();
   await node.connect();
-
   await cacheService.startSync();
 
-  memwatch.on('leak', async (info) => {
+
+
+  const leakCallback = _.debounce(async (info) => {
     log.info('leak', info);
 
-    if (!node.pool.syncing)
+
+    if(!node.pool.syncing && !cacheService.isSyncing)
       return;
 
-    try {
+    if (node.pool.syncing){
       await node.stopSync();
-      await cacheService.stopSync();
-    } catch (e) {
-
     }
 
-    if (global.gc)
-      global.gc();
+    if(cacheService.isSyncing)
+      await cacheService.stopSync();
 
-    await Promise.delay(node.network.pow.targetSpacing * 1000 / 2);
+
+    if (global.gc) {
+      global.gc();
+      log.info('start gc');
+    } else {
+      await Promise.delay(node.network.pow.targetSpacing * 1000 / 2);
+    }
+
     await node.startSync();
     await cacheService.startSync();
 
-  });
+  }, 10000, {leading: true, trailing: false});
+
+
+  memwatch.on('leak', leakCallback);
 
   node.on('connect', async (entry) => {
     log.info('%s (%d) added to chain.', entry.rhash(), entry.height);

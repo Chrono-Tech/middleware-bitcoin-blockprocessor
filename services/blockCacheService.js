@@ -36,8 +36,8 @@ class BlockCacheService {
     if (this.isSyncing)
       return;
 
-    await this.indexCollection();
     this.isSyncing = true;
+    await this.indexCollection();
 
     const mempool = await this.node.rpc.getRawMempool([]);
     if (!mempool.length)
@@ -59,12 +59,14 @@ class BlockCacheService {
   async doJob () {
 
     while (this.isSyncing) {
+
+      this.isLocked = true;
+
       try {
 
         if (!(await this.isCheckpointReached()))
           await Promise.reject({code: 2});
 
-        this.isLocked = true;
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 2);
         await this.updateDbStateWithBlock(block);
 
