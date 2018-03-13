@@ -36,8 +36,8 @@ class BlockCacheService {
     if (this.isSyncing)
       return;
 
-    await this.indexCollection();
     this.isSyncing = true;
+    await this.indexCollection();
 
     const mempool = await this.node.rpc.getRawMempool([]);
     if (!mempool.length)
@@ -59,20 +59,21 @@ class BlockCacheService {
   async doJob () {
 
     while (this.isSyncing) {
+
+      this.isLocked = true;
+
       try {
 
         if (!(await this.isCheckpointReached()))
           await Promise.reject({code: 2});
 
-        this.isLocked = true;
-        let block = await this.processBlock();
+        let block = await Promise.resolve(this.processBlock()).timeout(60000 * 2);
         await this.updateDbStateWithBlock(block);
 
         this.currentHeight++;
         _.pullAt(this.lastBlocks, 0);
         this.lastBlocks.push(block.hash);
         this.events.emit('block', block);
-        await Promise.delay(500);
         this.isLocked = false;
       } catch (err) {
 
@@ -81,7 +82,7 @@ class BlockCacheService {
           await Promise.delay(10000);
         }
 
-        if (_.get(err, 'code') === 1) {
+        if ([1, 11000].includes(_.get(err, 'code'))) {
           let lastCheckpointBlock = err.block || await blockModel.findOne({hash: this.lastBlocks[0]});
           log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
 
