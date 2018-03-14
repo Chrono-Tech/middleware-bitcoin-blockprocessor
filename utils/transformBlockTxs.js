@@ -1,6 +1,7 @@
 const _ = require('lodash'),
   config = require('../config'),
   Promise = require('bluebird'),
+  ipcExec = require('../services/ipcExec'),
   Network = require('bcoin/lib/protocol/network'),
   network = Network.get(config.node.network);
 
@@ -13,13 +14,13 @@ const _ = require('lodash'),
  */
 
 
-module.exports = async (node, txs) => {
+module.exports = async (txs) => {
 
   txs = txs.map(tx => tx.getJSON(network));
 
-  return await Promise.map(txs, async tx => {
+  return await Promise.mapSeries(txs, async tx => {
     tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index)=>{
-      const coin = await node.rpc.getTXOut([tx.hash, index, true]).catch(() => null);
+      const coin = await ipcExec('gettxout', [tx.hash, index, true]).catch(() => null);
       return {
         address: output.address,
         value: output.value,

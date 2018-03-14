@@ -12,7 +12,8 @@
     "memwatch-next": "^0.3.0",
     "mongoose": "^4.13.7",
     "node-ipc": "^9.1.1",
-    "require-all": "^2.2.0"
+    "require-all": "^2.2.0",
+    "zeromq": "^4.6.0"
   },
   "devDependencies": {
     "babel-eslint": "^7.2.3",
