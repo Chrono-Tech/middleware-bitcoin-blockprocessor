@@ -2,10 +2,11 @@ const config = require('../config'),
   bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
+  TX = require('bcoin/lib/primitives/tx'),
   blockModel = require('../models/blockModel'),
   EventEmitter = require('events'),
   zmq = require('zeromq'),
-  sock = zmq.socket('pull'),
+  sock = zmq.socket('sub'),
   ipcExec = require('../services/ipcExec'),
   networks = require('bcoin/lib/protocol/networks'),
   BlockModel = require('bcoin/lib/primitives/block'),
@@ -28,15 +29,19 @@ class BlockCacheService {
       .parseInt()
       .value();
 
+    sock.connect('tcp://127.0.0.1:43332');
+    sock.subscribe('rawtx');
+
     this.isLocked = false;
     this.events = new EventEmitter();
     this.currentHeight = 0;
     this.lastBlocks = [];
     this.isSyncing = false;
-    this.pendingTxCallback = (err, tx) => this.UnconfirmedTxEvent(err, tx);
+    this.pendingTxCallback = (topic, tx) => this.UnconfirmedTxEvent(tx);
   }
 
   async startSync () {
+
     if (this.isSyncing)
       return;
 
@@ -56,7 +61,8 @@ class BlockCacheService {
     this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).compact().reverse().value();
     if (!this.isLocked)
       this.doJob();
-    //this.node.pool.on('tx', this.pendingTxCallback);
+    sock.on('message', this.pendingTxCallback);
+
 
   }
 
@@ -132,8 +138,8 @@ class BlockCacheService {
           filter: {
             'txs.hash': pair[0], $or: _.chain(pair[1])
               .map(input => (
-                  {[`txs.$.outputs.${input.prevout.index}.spent`]: false}
-                )
+                {[`txs.$.outputs.${input.prevout.index}.spent`]: false}
+              )
               )
               .value()
           },
@@ -180,10 +186,10 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-        await blockModel.bulkWrite(input, {ordered: false});
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
-      }
+      await blockModel.bulkWrite(input, {ordered: false});
+      processed += input.length;
+      log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
+    }
     );
   }
 
@@ -237,22 +243,24 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-        await blockModel.bulkWrite(input, {ordered: false});
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
-      }
+      await blockModel.bulkWrite(input, {ordered: false});
+      processed += input.length;
+      log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
+    }
     );
 
   }
 
   async UnconfirmedTxEvent (tx) {
 
-    if (!await this.isSynced())
-      return;
+    // if (!await this.isSynced())
+    //   return;
+
+    tx = TX.fromRaw(tx, 'hex');
 
     const mempool = await ipcExec('getrawmempool', []);
     let currentUnconfirmedBlock = await
-        blockModel.findOne({number: -1}) || new blockModel({
+      blockModel.findOne({number: -1}) || new blockModel({
         number: -1,
         hash: null,
         timestamp: 0,

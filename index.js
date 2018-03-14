@@ -9,10 +9,7 @@ mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMon
 const
   filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   amqp = require('amqplib'),
-  _ = require('lodash'),
-  memwatch = require('memwatch-next'),
   bunyan = require('bunyan'),
-  transformBlockTxs = require('./utils/transformBlockTxs'),
   blockCacheService = require('./services/blockCacheService'),
   log = bunyan.createLogger({name: 'core.blockProcessor'});
 

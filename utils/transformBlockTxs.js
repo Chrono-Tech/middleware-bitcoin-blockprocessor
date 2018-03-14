@@ -1,5 +1,4 @@
-const _ = require('lodash'),
-  config = require('../config'),
+const config = require('../config'),
   Promise = require('bluebird'),
   ipcExec = require('../services/ipcExec'),
   Network = require('bcoin/lib/protocol/network'),
@@ -37,5 +36,5 @@ module.exports = async (txs) => {
       outputs: tx.outputs
     };
 
-  })
+  });
 };
