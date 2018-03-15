@@ -20,6 +20,7 @@ install:
   - npm install -g pm2
 
 before_script:
+    - pm2 start node_modules/bcoin-ipc-node/index.js
     - pm2 start index.js
 
 script:
