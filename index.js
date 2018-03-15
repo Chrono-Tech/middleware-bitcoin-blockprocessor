@@ -1,13 +1,15 @@
 const mongoose = require('mongoose'),
   config = require('./config'),
+  customNetworkRegistrator = require('./networks'),
   Promise = require('bluebird');
+
+customNetworkRegistrator(config.node.network);
 
 mongoose.Promise = Promise;
 mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
 mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
 
-const
-  filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
+const filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   amqp = require('amqplib'),
   bunyan = require('bunyan'),
   blockCacheService = require('./services/blockCacheService'),
@@ -18,7 +20,6 @@ const
  * @description process blocks, and notify, through rabbitmq, other
  * services about new block or tx, where we meet registered address
  */
-
 
 const cacheService = new blockCacheService();
 
@@ -50,11 +51,10 @@ const init = async function () {
     channel = await amqpConn.createChannel();
   }
 
-  await cacheService.startSync().catch(e=>{
+  await cacheService.startSync().catch(e => {
     log.error(`error starting cache service: ${e}`);
     process.exit(0);
   });
-
 
   cacheService.events.on('block', async block => {
     log.info('%s (%d) added to cache.', block.hash, block.number);

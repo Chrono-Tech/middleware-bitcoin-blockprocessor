@@ -7,7 +7,6 @@ const config = require('../config'),
 /**
  * @service
  * @description transform tx to full object
- * @param node - bcoin full node
  * @param txs - original block's array of tx objects
  * @returns {Promise.<*>}
  */
