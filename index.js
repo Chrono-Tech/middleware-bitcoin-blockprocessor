@@ -1,20 +1,19 @@
 const mongoose = require('mongoose'),
   config = require('./config'),
+  customNetworkRegistrator = require('./networks'),
   Promise = require('bluebird');
+
+customNetworkRegistrator(config.node.network);
 
 mongoose.Promise = Promise;
 mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
 mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
 
-const bcoin = require('bcoin'),
-  filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
-  ipcService = require('./services/ipcService'),
+const filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   amqp = require('amqplib'),
-  _ = require('lodash'),
-  memwatch = require('memwatch-next'),
   bunyan = require('bunyan'),
-  transformBlockTxs = require('./utils/transformBlockTxs'),
-  customNetworkRegistrator = require('./networks'),
+  zmq = require('zeromq'),
+  sock = zmq.socket('sub'),
   blockCacheService = require('./services/blockCacheService'),
   log = bunyan.createLogger({name: 'core.blockProcessor'});
 
@@ -24,21 +23,11 @@ const bcoin = require('bcoin'),
  * services about new block or tx, where we meet registered address
  */
 
-customNetworkRegistrator(config.node.network);
 
-const node = new bcoin.fullnode({
-  network: config.node.network,
-  db: config.node.dbDriver,
-  prefix: config.node.dbpath,
-  spv: false,
-  indexTX: true,
-  indexAddress: true,
-  coinCache: config.node.coinCache,
-  cacheSize: config.node.cacheSize,
-  logLevel: 'info'
-});
+sock.connect(config.node.zmq);
+sock.subscribe('rawtx');
 
-const cacheService = new blockCacheService(node);
+const cacheService = new blockCacheService(sock);
 
 [mongoose.accounts, mongoose.connection].forEach(connection =>
   connection.on('disconnected', function () {
@@ -68,44 +57,9 @@ const init = async function () {
     channel = await amqpConn.createChannel();
   }
 
-  await node.open();
-  await node.connect();
-  await cacheService.startSync();
-
-
-
-  const leakCallback = _.debounce(async (info) => {
-    log.info('leak', info);
-
-
-    if(!node.pool.syncing && !cacheService.isSyncing)
-      return;
-
-    if (node.pool.syncing){
-      await node.stopSync();
-    }
-
-    if(cacheService.isSyncing)
-      await cacheService.stopSync();
-
-
-    if (global.gc) {
-      global.gc();
-      log.info('start gc');
-    } else {
-      await Promise.delay(node.network.pow.targetSpacing * 1000 / 2);
-    }
-
-    await node.startSync();
-    await cacheService.startSync();
-
-  }, 10000, {leading: true, trailing: false});
-
-
-  memwatch.on('leak', leakCallback);
-
-  node.on('connect', async (entry) => {
-    log.info('%s (%d) added to chain.', entry.rhash(), entry.height);
+  await cacheService.startSync().catch(e => {
+    log.error(`error starting cache service: ${e}`);
+    process.exit(0);
   });
 
   cacheService.events.on('block', async block => {
@@ -116,23 +70,16 @@ const init = async function () {
     ));
   });
 
-  node.pool.on('tx', async (tx) => {
+  cacheService.events.on('tx', async (tx) => {
     if (!await cacheService.isSynced())
       return;
 
-    const fullTx = (await transformBlockTxs(node, [tx]))[0];
-    let filtered = await filterTxsByAccountsService([fullTx]);
+    let filtered = await filterTxsByAccountsService([tx]);
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
     ));
   });
 
-  node.on('error', err => {
-    log.error(err);
-  });
-
-  ipcService(node);
-  node.startSync();
 };
 
 module.exports = init();

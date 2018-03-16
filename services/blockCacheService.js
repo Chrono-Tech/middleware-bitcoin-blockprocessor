@@ -2,8 +2,14 @@ const config = require('../config'),
   bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
+  TX = require('bcoin/lib/primitives/tx'),
   blockModel = require('../models/blockModel'),
   EventEmitter = require('events'),
+  zmq = require('zeromq'),
+  sock = zmq.socket('sub'),
+  ipcExec = require('../services/ipcExec'),
+  networks = require('bcoin/lib/protocol/networks'),
+  BlockModel = require('bcoin/lib/primitives/block'),
   log = bunyan.createLogger({name: 'app.services.blockCacheService'}),
   transformBlockTxs = require('../utils/transformBlockTxs');
 
@@ -16,9 +22,8 @@ const config = require('../config'),
 
 class BlockCacheService {
 
-  constructor (node) {
-    this.node = node;
-    this.checkpointHeight = _.chain(this.node.network.checkpointMap)
+  constructor (sock) {
+    this.checkpointHeight = _.chain(networks[config.node.network].checkpointMap)
       .keys()
       .last()
       .parseInt()
@@ -29,17 +34,18 @@ class BlockCacheService {
     this.currentHeight = 0;
     this.lastBlocks = [];
     this.isSyncing = false;
-    this.pendingTxCallback = (err, tx) => this.UnconfirmedTxEvent(err, tx);
+    this.pendingTxCallback = (topic, tx) => this.UnconfirmedTxEvent(tx);
   }
 
   async startSync () {
+
     if (this.isSyncing)
       return;
 
     this.isSyncing = true;
     await this.indexCollection();
 
-    const mempool = await this.node.rpc.getRawMempool([]);
+    const mempool = await ipcExec('getrawmempool', []);
     if (!mempool.length)
       await blockModel.remove({number: -1});
 
@@ -52,8 +58,7 @@ class BlockCacheService {
     this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).compact().reverse().value();
     if (!this.isLocked)
       this.doJob();
-    this.node.pool.on('tx', this.pendingTxCallback);
-
+    sock.on('message', this.pendingTxCallback);
   }
 
   async doJob () {
@@ -76,6 +81,11 @@ class BlockCacheService {
         this.events.emit('block', block);
         this.isLocked = false;
       } catch (err) {
+
+        if (err && err.code === 'ENOENT') {
+          log.error('ipc is not available');
+          process.exit(0);
+        }
 
         if (err.code === 0) {
           log.info(`await for next block ${this.currentHeight}`);
@@ -123,8 +133,8 @@ class BlockCacheService {
           filter: {
             'txs.hash': pair[0], $or: _.chain(pair[1])
               .map(input => (
-                  {[`txs.$.outputs.${input.prevout.index}.spent`]: false}
-                )
+                {[`txs.$.outputs.${input.prevout.index}.spent`]: false}
+              )
               )
               .value()
           },
@@ -171,10 +181,10 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-        await blockModel.bulkWrite(input, {ordered: false});
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
-      }
+      await blockModel.bulkWrite(input, {ordered: false});
+      processed += input.length;
+      log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
+    }
     );
   }
 
@@ -228,32 +238,35 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-        await blockModel.bulkWrite(input, {ordered: false});
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
-      }
+      await blockModel.bulkWrite(input, {ordered: false});
+      processed += input.length;
+      log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
+    }
     );
 
   }
 
   async UnconfirmedTxEvent (tx) {
 
-    if (!await this.isSynced())
-      return;
+    // if (!await this.isSynced())
+    //   return;
 
-    const mempool = await this.node.rpc.getRawMempool([]);
+    tx = TX.fromRaw(tx, 'hex');
+
+    const mempool = await ipcExec('getrawmempool', []);
     let currentUnconfirmedBlock = await
-        blockModel.findOne({number: -1}) || new blockModel({
+      blockModel.findOne({number: -1}) || new blockModel({
         number: -1,
         hash: null,
         timestamp: 0,
         txs: []
       });
 
-    const fullTx = await transformBlockTxs(this.node, [tx]);
+    const fullTx = await transformBlockTxs([tx]);
     let alreadyIncludedTxs = _.filter(currentUnconfirmedBlock.txs, tx => mempool.includes(tx.hash));
     currentUnconfirmedBlock.txs = _.union(alreadyIncludedTxs, fullTx);
     await blockModel.findOneAndUpdate({number: -1}, _.omit(currentUnconfirmedBlock.toObject(), '_id', '__v'), {upsert: true});
+    this.events.emit('tx', _.get(fullTx, 0));
   }
 
   async stopSync () {
@@ -263,12 +276,13 @@ class BlockCacheService {
 
   async processBlock () {
 
-    let hash = await this.node.chain.db.getHash(this.currentHeight);
+    let hash = await ipcExec('getblockhash', [this.currentHeight]);
     if (!hash) {
       return Promise.reject({code: 0});
     }
 
-    const lastBlockHashes = await Promise.mapSeries(this.lastBlocks, async blockHash => await this.node.chain.db.getHash(blockHash));
+    const lastBlocks = await Promise.mapSeries(this.lastBlocks, async blockHash => await ipcExec('getblock', [blockHash, true]));
+    const lastBlockHashes = _.chain(lastBlocks).map(block => _.get(block, 'hash')).compact().value();
 
     let savedBlocks = await blockModel.find({hash: {$in: lastBlockHashes}}, {number: 1}).limit(this.lastBlocks.length);
     savedBlocks = _.chain(savedBlocks).map(block => block.number).orderBy().value();
@@ -278,9 +292,10 @@ class BlockCacheService {
       validatedBlocks.length !== this.lastBlocks.length)
       return Promise.reject({code: 1}); //head has been blown off
 
-    let block = await this.node.chain.db.getBlock(hash);
+    let blockRaw = await ipcExec('getblock', [hash, false]);
+    let block = BlockModel.fromRaw(blockRaw, 'hex');
 
-    const txs = await transformBlockTxs(this.node, block.txs);
+    const txs = await transformBlockTxs(block.txs);
 
     return {
       network: config.node.network,
@@ -298,13 +313,13 @@ class BlockCacheService {
   }
 
   async isSynced () {
-    const tip = await this.node.chain.db.getTip();
-    return this.currentHeight >= tip.height - config.consensus.lastBlocksValidateAmount;
+    const count = await ipcExec('getblockcount', []);
+    return this.currentHeight >= count - config.consensus.lastBlocksValidateAmount;
   }
 
   async isCheckpointReached () {
-    const tip = await this.node.chain.db.getTip();
-    return this.checkpointHeight <= tip.height;
+    const count = await ipcExec('getblockcount', []);
+    return this.checkpointHeight <= count;
   }
 
 }
