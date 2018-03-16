@@ -12,6 +12,8 @@ mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMon
 const filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   amqp = require('amqplib'),
   bunyan = require('bunyan'),
+  zmq = require('zeromq'),
+  sock = zmq.socket('sub'),
   blockCacheService = require('./services/blockCacheService'),
   log = bunyan.createLogger({name: 'core.blockProcessor'});
 
@@ -21,7 +23,11 @@ const filterTxsByAccountsService = require('./services/filterTxsByAccountsServic
  * services about new block or tx, where we meet registered address
  */
 
-const cacheService = new blockCacheService();
+
+sock.connect(config.node.zmq);
+sock.subscribe('rawtx');
+
+const cacheService = new blockCacheService(sock);
 
 [mongoose.accounts, mongoose.connection].forEach(connection =>
   connection.on('disconnected', function () {

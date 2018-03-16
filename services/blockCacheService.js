@@ -22,15 +22,12 @@ const config = require('../config'),
 
 class BlockCacheService {
 
-  constructor () {
+  constructor (sock) {
     this.checkpointHeight = _.chain(networks[config.node.network].checkpointMap)
       .keys()
       .last()
       .parseInt()
       .value();
-
-    sock.connect('tcp://127.0.0.1:43332');
-    sock.subscribe('rawtx');
 
     this.isLocked = false;
     this.events = new EventEmitter();
@@ -62,8 +59,6 @@ class BlockCacheService {
     if (!this.isLocked)
       this.doJob();
     sock.on('message', this.pendingTxCallback);
-
-
   }
 
   async doJob () {
