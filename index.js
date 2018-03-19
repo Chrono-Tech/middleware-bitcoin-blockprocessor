@@ -23,11 +23,18 @@ const filterTxsByAccountsService = require('./services/filterTxsByAccountsServic
  * services about new block or tx, where we meet registered address
  */
 
-
+sock.monitor(500, 0);
 sock.connect(config.node.zmq);
 sock.subscribe('rawtx');
 
+sock.on('close', ()=> {
+  log.error('zmq disconnected!');
+  process.exit(0);
+});
+
 const cacheService = new blockCacheService(sock);
+
+
 
 [mongoose.accounts, mongoose.connection].forEach(connection =>
   connection.on('disconnected', function () {
@@ -37,6 +44,7 @@ const cacheService = new blockCacheService(sock);
 );
 
 const init = async function () {
+
   let amqpConn = await amqp.connect(config.rabbit.url)
     .catch(() => {
       log.error('rabbitmq is not available!');
