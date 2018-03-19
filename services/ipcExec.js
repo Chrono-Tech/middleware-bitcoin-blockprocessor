@@ -25,9 +25,21 @@ module.exports = async (method, params) => {
   });
 
   let response = await new Promise((res, rej) => {
-    ipcInstance.of[config.node.ipcName].on('message', data => data.error ? rej(data.error) : res(data.result));
+    ipcInstance.of[config.node.ipcName].on('message', async data => {
+      if (!data.error)
+        return res(data.result);
+
+      ipcInstance.disconnect(config.node.ipcName);
+      await Promise.delay(500);
+      rej(data.error);
+
+    });
     ipcInstance.of[config.node.ipcName].emit('message', JSON.stringify({method: method, params: params}));
-    ipcInstance.of[config.node.ipcName].on('error', rej);
+    ipcInstance.of[config.node.ipcName].on('error', async err => {
+      ipcInstance.disconnect(config.node.ipcName);
+      await Promise.delay(500);
+      rej(err);
+    });
   });
 
   ipcInstance.disconnect(config.node.ipcName);
