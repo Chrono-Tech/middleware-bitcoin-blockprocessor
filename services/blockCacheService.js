@@ -112,7 +112,7 @@ class BlockCacheService {
           await Promise.delay(10000);
         }
 
-        if (![0, 1, 2].includes(_.get(err, 'code')))
+        if (![0, 1, 2, -32600].includes(_.get(err, 'code')))
           log.error(err);
 
         this.isLocked = false;
