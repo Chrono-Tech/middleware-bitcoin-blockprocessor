@@ -53,7 +53,7 @@ class BlockCacheService {
       network: config.node.network,
       timestamp: {$ne: 0}
     }).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
-    this.currentHeight = _.chain(currentBlocks).get('0.number', -1).add(1).value();
+    this.currentHeight = _.chain(currentBlocks).get('0.number', -1).value();
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
     this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).compact().reverse().value();
     if (!this.isLocked)
@@ -150,10 +150,10 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-        await utxoModel.insertMany(input);
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-      }
+      await utxoModel.insertMany(input);
+      processed += input.length;
+      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+    }
     );
 
     await utxoModel.remove({$or: toRemove});
@@ -194,10 +194,10 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-        await utxoModel.insertMany(input, {ordered: false});
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-      }
+      await utxoModel.insertMany(input, {ordered: false});
+      processed += input.length;
+      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+    }
     );
 
     await utxoModel.remove({blockNumber: {$gte: block.number}});
@@ -218,7 +218,7 @@ class BlockCacheService {
 
     const mempool = await ipcExec('getrawmempool', []);
     let currentUnconfirmedBlock = await
-        blockModel.findOne({number: -1}) || new blockModel({
+      blockModel.findOne({number: -1}) || new blockModel({
         number: -1,
         hash: null,
         timestamp: 0,
@@ -239,7 +239,7 @@ class BlockCacheService {
 
   async processBlock () {
 
-    let hash = await ipcExec('getblockhash', [this.currentHeight]);
+    let hash = await ipcExec('getblockhash', [this.currentHeight + 1]);
     if (!hash) {
       return Promise.reject({code: 0});
     }
