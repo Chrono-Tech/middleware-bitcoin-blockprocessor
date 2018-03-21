@@ -1,7 +1,9 @@
 const config = require('../config'),
   Promise = require('bluebird'),
+  blockModel = require('../models/blockModel'),
   ipcExec = require('../services/ipcExec'),
   Network = require('bcoin/lib/protocol/network'),
+  _ = require('lodash'),
   network = Network.get(config.node.network);
 
 /**
@@ -16,14 +18,39 @@ module.exports = async (txs) => {
 
   txs = txs.map(tx => tx.getJSON(network));
 
-  return await Promise.mapSeries(txs, async tx => {
-    tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index)=>{
-      const coin = await ipcExec('gettxout', [tx.hash, index, true]).catch(() => null);
+  const inputHashes = _.chain(txs)
+    .map(tx => tx.inputs)
+    .flattenDeep()
+    .map(input => input.prevout.hash)
+    .uniq()
+    .value();
+
+  const blocksWithInputs = await blockModel.find({'txs.hash': {$in: inputHashes}}, {
+    'txs.outputs.value': 1,
+    'txs.hash': 1
+  });
+
+  return txs.map(tx => {
+    tx.outputs = tx.outputs.map(output => {
       return {
         address: output.address,
         value: output.value,
-        spent: !coin
       };
+    });
+
+    const txsWithInputs = _.chain(blocksWithInputs)
+      .map(block => block.txs)
+      .flattenDeep()
+      .value();
+
+    tx.inputs = tx.inputs.map(input => {
+
+      input.value = _.chain(txsWithInputs)
+        .find({hash: input.prevout.hash})
+        .get(`outputs.${input.prevout.index}.value`, 0)
+        .value();
+
+      return input;
     });
 
     return {
