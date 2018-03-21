@@ -4,9 +4,8 @@ const config = require('../config'),
   Promise = require('bluebird'),
   TX = require('bcoin/lib/primitives/tx'),
   blockModel = require('../models/blockModel'),
+  utxoModel = require('../models/utxoModel'),
   EventEmitter = require('events'),
-  zmq = require('zeromq'),
-  sock = zmq.socket('sub'),
   ipcExec = require('../services/ipcExec'),
   networks = require('bcoin/lib/protocol/networks'),
   BlockModel = require('bcoin/lib/primitives/block'),
@@ -29,6 +28,7 @@ class BlockCacheService {
       .parseInt()
       .value();
 
+    this.sock = sock;
     this.isLocked = false;
     this.events = new EventEmitter();
     this.currentHeight = 0;
@@ -58,7 +58,7 @@ class BlockCacheService {
     this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).compact().reverse().value();
     if (!this.isLocked)
       this.doJob();
-    sock.on('message', this.pendingTxCallback);
+    this.sock.on('message', this.pendingTxCallback);
   }
 
   async doJob () {
@@ -72,7 +72,10 @@ class BlockCacheService {
         if (!(await this.isCheckpointReached()))
           await Promise.reject({code: 2});
 
-        let block = await Promise.resolve(this.processBlock()).timeout(60000 * 2);
+        if(!(await this.validateUTXO()))
+          await Promise.reject({code: 1});
+
+        let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
         await this.updateDbStateWithBlock(block);
 
         this.currentHeight++;
@@ -123,69 +126,48 @@ class BlockCacheService {
 
   async updateDbStateWithBlock (block) {
 
-    const inputs = _.chain(block.txs)
+    const toRemove = _.chain(block.txs)
       .map(tx => tx.inputs)
       .flattenDeep()
-      .groupBy('prevout.hash')
-      .toPairs()
-      .map(pair => ({
-        updateOne: {
-          filter: {
-            'txs.hash': pair[0], $or: _.chain(pair[1])
-              .map(input => (
-                {[`txs.$.outputs.${input.prevout.index}.spent`]: false}
-              )
-              )
-              .value()
-          },
-          update: {
-            $set: _.chain(pair[1])
-              .map(input =>
-                [`txs.$.outputs.${input.prevout.index}.spent`, true]
-              )
-              .fromPairs()
-              .value()
-          }
-        }
-      }))
-      .union([
-        {
-          updateOne: {
-            filter: {number: block.number},
-            update: block,
-            upsert: true
-          }
-        },
-        {
-          updateOne: {
-            filter: {number: -1},
-            update: {
-              $pull: {
-                txs: {
-                  hash: {
-                    $in: block.txs.map(tx => tx.hash)
-                  }
-                }
-              }
-            }
-          }
-        }
+      .map(input => input.prevout)
+      .value();
 
-      ])
+    const toCreate = _.chain(block.txs)
+      .map(tx =>
+        tx.outputs.map((output, index) =>
+          _.merge(output, {hash: tx.hash, index: index, blockNumber: block.number})
+        )
+      )
+      .flattenDeep()
+      .reject(output =>
+        _.find(toRemove, {hash: output.hash, index: output.index})
+      )
       .value();
 
     log.info('updating utxos for block: ', block.number);
-    log.info('total records to be updated: ', inputs.length);
 
-    const chunks = _.chunk(inputs, 50);
+    const chunks = _.chunk(toCreate, 50);
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-      await blockModel.bulkWrite(input, {ordered: false});
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
-    }
+        await utxoModel.insertMany(input);
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+      }
     );
+
+    await utxoModel.remove({$or: toRemove});
+    await blockModel.update({number: block.number}, block, {upsert: true});
+    await blockModel.update({number: -1}, {
+      $pull: {
+        txs: {
+          hash: {
+            $in: block.txs.map(tx => tx.hash)
+          }
+        }
+      }
+    });
+
   }
 
   async rollbackStateFromBlock (block) {
@@ -197,65 +179,46 @@ class BlockCacheService {
       ]
     });
 
-    const inputs = _.chain(blocksToDelete)
-      .map(block => block.txs)
+    const toCreate = _.chain(blocksToDelete)
+      .map(block => block.toObject().txs)
       .flattenDeep()
       .map(tx => tx.inputs)
       .flattenDeep()
-      .groupBy('prevout.hash')
-      .toPairs()
-      .map(pair => ({
-        updateOne: {
-          filter: {'txs.hash': pair[0]},
-          update: {
-            $set: _.chain(pair[1])
-              .map(input =>
-                [`txs.$.outputs.${input.prevout.index}.spent`, false]
-              )
-              .fromPairs()
-              .value()
-          }
-        }
-      }))
-      .union([
-        {
-          deleteMany: {
-            filter: {
-              $or: [
-                {hash: {$in: this.lastBlocks}},
-                {number: {$gte: block.number}}
-              ]
-            }
-          }
-        }
-      ])
+      .map(input => _.merge(input.prevout, {address: input.address, value: input.value, blockNumber: block.number}))
+      .uniqWith(_.isEqual)
       .value();
 
     log.info('rollback utxos from block: ', block.number);
-    log.info('total records to be updated: ', inputs.length);
 
-    const chunks = _.chunk(inputs, 50);
+    const chunks = _.chunk(toCreate, 50);
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-      await blockModel.bulkWrite(input, {ordered: false});
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / inputs.length * 100)}%`);
-    }
+        await utxoModel.insertMany(input, {ordered: false});
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+      }
     );
 
+    await utxoModel.remove({blockNumber: {$gte: block.number}});
+    await blockModel.remove({
+      $or: [
+        {hash: {$in: this.lastBlocks}},
+        {number: {$gte: block.number}}
+      ]
+    });
   }
 
   async UnconfirmedTxEvent (tx) {
 
-    // if (!await this.isSynced())
-    //   return;
+    if (!await this.isSynced())
+      return;
 
     tx = TX.fromRaw(tx, 'hex');
 
     const mempool = await ipcExec('getrawmempool', []);
     let currentUnconfirmedBlock = await
-      blockModel.findOne({number: -1}) || new blockModel({
+        blockModel.findOne({number: -1}) || new blockModel({
         number: -1,
         hash: null,
         timestamp: 0,
@@ -320,6 +283,13 @@ class BlockCacheService {
   async isCheckpointReached () {
     const count = await ipcExec('getblockcount', []);
     return this.checkpointHeight <= count;
+  }
+
+  async validateUTXO () {
+    let blocks = await blockModel.find({$where: 'obj.txs.length > 0'}, {number: 1}).sort({number: -1}).limit(config.consensus.lastBlocksValidateAmount);
+    blocks = _.map(blocks, block=>block.number);
+    const UTXOcount = await utxoModel.count({blockNumber: {$in: blocks}});
+    return UTXOcount >= blocks.length;
   }
 
 }
