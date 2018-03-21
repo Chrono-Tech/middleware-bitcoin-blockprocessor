@@ -1,7 +1,5 @@
 const config = require('../config'),
-  Promise = require('bluebird'),
   blockModel = require('../models/blockModel'),
-  ipcExec = require('../services/ipcExec'),
   Network = require('bcoin/lib/protocol/network'),
   _ = require('lodash'),
   network = Network.get(config.node.network);
