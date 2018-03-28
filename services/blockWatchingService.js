@@ -7,9 +7,8 @@ const config = require('../config'),
   utxoModel = require('../models/utxoModel'),
   EventEmitter = require('events'),
   ipcExec = require('../services/ipcExec'),
-  networks = require('bcoin/lib/protocol/networks'),
   BlockModel = require('bcoin/lib/primitives/block'),
-  log = bunyan.createLogger({name: 'app.services.blockCacheService'}),
+  log = bunyan.createLogger({name: 'app.services.blockWatchingService'}),
   transformBlockTxs = require('../utils/transformBlockTxs');
 
 /**
@@ -19,7 +18,7 @@ const config = require('../config'),
  * @returns {Promise.<*>}
  */
 
-class BlockCacheService {
+class blockWatchingService {
 
   constructor (sock, currentHeight) {
 
@@ -79,12 +78,13 @@ class BlockCacheService {
         }
 
         if (err.code === 0) {
-          log.info(`await for next block ${this.currentHeight}`);
+          log.info(`await for next block ${this.currentHeight + 1}`);
           await Promise.delay(10000);
+          continue;
         }
 
         if ([1, 11000].includes(_.get(err, 'code'))) {
-          let lastCheckpointBlock = err.block || await blockModel.findOne({hash: this.lastBlocks[0]});
+          let lastCheckpointBlock = await blockModel.findOne({hash: this.lastBlocks[0]});
           log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
           await this.rollbackStateFromBlock(lastCheckpointBlock);
           const currentBlocks = await blockModel.find({
@@ -94,7 +94,7 @@ class BlockCacheService {
           }).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
           this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).reverse().value();
           this.currentHeight = lastCheckpointBlock.number;
-
+          continue;
         }
 
         if (![0, 1, 2, -32600].includes(_.get(err, 'code')))
@@ -130,17 +130,17 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-        await utxoModel.remove({
-          $or: input.map(item => ({
-            hash: item.hash,
-            index: item.index,
-            blockNumber: block.number
-          }))
-        });
-        await utxoModel.insertMany(input);
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-      }
+      await utxoModel.remove({
+        $or: input.map(item => ({
+          hash: item.hash,
+          index: item.index,
+          blockNumber: block.number
+        }))
+      });
+      await utxoModel.insertMany(input);
+      processed += input.length;
+      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+    }
     );
 
     await utxoModel.remove({$or: toRemove});
@@ -181,10 +181,10 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-        await utxoModel.insertMany(input, {ordered: false});
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-      }
+      await utxoModel.insertMany(input, {ordered: false});
+      processed += input.length;
+      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+    }
     );
 
     await utxoModel.remove({blockNumber: {$gte: block.number}});
@@ -205,7 +205,7 @@ class BlockCacheService {
 
     const mempool = await ipcExec('getrawmempool', []);
     let currentUnconfirmedBlock = await
-        blockModel.findOne({number: -1}) || new blockModel({
+      blockModel.findOne({number: -1}) || new blockModel({
         number: -1,
         hash: null,
         timestamp: 0,
@@ -238,16 +238,13 @@ class BlockCacheService {
     savedBlocks = _.chain(savedBlocks).map(block => block.number).orderBy().value();
     const validatedBlocks = _.filter(savedBlocks, (s, i) => s === i + savedBlocks[0]);
 
-    if (_.compact(lastBlockHashes).length !== this.lastBlocks.length || savedBlocks.length !== this.lastBlocks.length ||
-      validatedBlocks.length !== this.lastBlocks.length)
+    if (validatedBlocks.length !== this.lastBlocks.length)
       return Promise.reject({code: 1}); //head has been blown off
 
     let blockRaw = await ipcExec('getblock', [hash, false]);
     let block = BlockModel.fromRaw(blockRaw, 'hex');
-
-    console.log('before');
     const txs = await transformBlockTxs(block.txs);
-    console.log('after');
+
     return {
       network: config.node.network,
       number: this.currentHeight,
@@ -277,4 +274,4 @@ class BlockCacheService {
 
 }
 
-module.exports = BlockCacheService;
+module.exports = blockWatchingService;

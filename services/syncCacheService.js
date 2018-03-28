@@ -62,7 +62,7 @@ class SyncCacheService {
         _.find(lockerChunks, lock => lock[0] === item[0])
       ).head().value();
 
-      let lastBlock = await await ipcExec('getblockhash', [_.last(newChunkToLock)]).catch(() => null);
+      let lastBlock = await ipcExec('getblockhash', [_.last(newChunkToLock)]).catch(() => null);
       locker.lock = false;
 
       if (!newChunkToLock || !lastBlock) {
@@ -84,11 +84,10 @@ class SyncCacheService {
           }))
         });
         await utxoModel.insertMany(utxo);
-        await blockModel.findOneAndUpdate({number: block.number}, block, {upsert: true});
+        await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
         _.pull(newChunkToLock, blockNumber);
         this.events.emit('block', block);
       }).catch((e) => {
-        console.log(e)
         if (e && e.code === 11000)
           _.pull(newChunkToLock, newChunkToLock[0]);
       });

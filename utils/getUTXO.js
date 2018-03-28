@@ -1,6 +1,4 @@
-const config = require('../config'),
-  Promise = require('bluebird'),
-  ipcExec = require('../services/ipcExec'),
+const Promise = require('bluebird'),
   blockModel = require('../models/blockModel'),
   _ = require('lodash');
 
