@@ -44,9 +44,7 @@ module.exports = {
     shadow: parseInt(process.env.SYNC_SHADOW) || true
   },
   node: {
-    checkpointHeight: process.env.LAST_CHECKPOINT_HEIGHT || 700000,
     zmq: process.env.ZMQ || 'tcp://127.0.0.1:43332',
-    blockchain: process.env.BLOCKCHAIN || 'bitcoin',
     network: process.env.NETWORK || 'regtest',
     ipcName: process.env.IPC_NAME || 'bitcoin',
     ipcPath: process.env.IPC_PATH || '/tmp/'
