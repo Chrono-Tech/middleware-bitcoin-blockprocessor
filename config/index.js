@@ -40,6 +40,9 @@ module.exports = {
     url: process.env.RABBIT_URI || 'amqp://localhost:5672',
     serviceName: process.env.RABBIT_SERVICE_NAME || 'app_bitcoin'
   },
+  sync: {
+    shadow: parseInt(process.env.SYNC_SHADOW) || true
+  },
   node: {
     checkpointHeight: process.env.LAST_CHECKPOINT_HEIGHT || 700000,
     zmq: process.env.ZMQ || 'tcp://127.0.0.1:43332',

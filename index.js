@@ -88,10 +88,6 @@ const init = async function () {
     ));
   });
 
-  syncCacheService.events.on('end', () => {
-    log.info(`cached the whole blockchain up to block: ${endBlock}`);
-  });
-
   let endBlock = await syncCacheService.start()
     .catch((err) => {
       if (_.get(err, 'code') === 0) {
@@ -100,6 +96,16 @@ const init = async function () {
       }
       log.error(err);
     });
+
+  await new Promise((res) => {
+    if (config.sync.shadow)
+      return res();
+
+    syncCacheService.events.on('end', () => {
+      log.info(`cached the whole blockchain up to block: ${endBlock}`);
+      res();
+    });
+  });
 
   const blockWatchingService = new BlockWatchingService(sock, endBlock);
 
