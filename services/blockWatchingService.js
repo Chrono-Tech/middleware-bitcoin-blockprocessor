@@ -21,17 +21,11 @@ const config = require('../config'),
 
 class BlockCacheService {
 
-  constructor (sock) {
-    this.checkpointHeight = _.chain(networks[config.node.network].checkpointMap)
-      .keys()
-      .last()
-      .parseInt()
-      .value();
+  constructor (sock, currentHeight) {
 
     this.sock = sock;
-    this.isLocked = false;
     this.events = new EventEmitter();
-    this.currentHeight = 0;
+    this.currentHeight = currentHeight;
     this.lastBlocks = [];
     this.isSyncing = false;
     this.pendingTxCallback = (topic, tx) => this.UnconfirmedTxEvent(tx);
@@ -51,13 +45,13 @@ class BlockCacheService {
 
     const currentBlocks = await blockModel.find({
       network: config.node.network,
-      timestamp: {$ne: 0}
+      timestamp: {$ne: 0},
+      number: {$lte: this.currentHeight}
     }).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
-    this.currentHeight = _.chain(currentBlocks).get('0.number', -1).value();
+    //this.currentHeight = _.chain(currentBlocks).get('0.number', -1).value();
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
     this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).compact().reverse().value();
-    if (!this.isLocked)
-      this.doJob();
+    this.doJob();
     this.sock.on('message', this.pendingTxCallback);
   }
 
@@ -65,15 +59,10 @@ class BlockCacheService {
 
     while (this.isSyncing) {
 
-      this.isLocked = true;
-
       try {
 
-        if (!(await this.isCheckpointReached()))
-          await Promise.reject({code: 2});
-
-        if(!(await this.validateUTXO()))
-          await Promise.reject({code: 1});
+        /*        if (!(await this.validateUTXO()))
+         await Promise.reject({code: 1});*/
 
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
         await this.updateDbStateWithBlock(block);
@@ -82,7 +71,6 @@ class BlockCacheService {
         _.pullAt(this.lastBlocks, 0);
         this.lastBlocks.push(block.hash);
         this.events.emit('block', block);
-        this.isLocked = false;
       } catch (err) {
 
         if (err && err.code === 'ENOENT') {
@@ -98,7 +86,6 @@ class BlockCacheService {
         if ([1, 11000].includes(_.get(err, 'code'))) {
           let lastCheckpointBlock = err.block || await blockModel.findOne({hash: this.lastBlocks[0]});
           log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
-
           await this.rollbackStateFromBlock(lastCheckpointBlock);
           const currentBlocks = await blockModel.find({
             network: config.node.network,
@@ -110,15 +97,8 @@ class BlockCacheService {
 
         }
 
-        if (err.code === 2) {
-          log.info(`await until blockchain will be synced till last checkpoint at height ${this.checkpointHeight}`);
-          await Promise.delay(10000);
-        }
-
         if (![0, 1, 2, -32600].includes(_.get(err, 'code')))
           log.error(err);
-
-        this.isLocked = false;
       }
     }
 
@@ -150,10 +130,17 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-      await utxoModel.insertMany(input);
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-    }
+        await utxoModel.remove({
+          $or: input.map(item => ({
+            hash: item.hash,
+            index: item.index,
+            blockNumber: block.number
+          }))
+        });
+        await utxoModel.insertMany(input);
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+      }
     );
 
     await utxoModel.remove({$or: toRemove});
@@ -194,10 +181,10 @@ class BlockCacheService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-      await utxoModel.insertMany(input, {ordered: false});
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-    }
+        await utxoModel.insertMany(input, {ordered: false});
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+      }
     );
 
     await utxoModel.remove({blockNumber: {$gte: block.number}});
@@ -218,7 +205,7 @@ class BlockCacheService {
 
     const mempool = await ipcExec('getrawmempool', []);
     let currentUnconfirmedBlock = await
-      blockModel.findOne({number: -1}) || new blockModel({
+        blockModel.findOne({number: -1}) || new blockModel({
         number: -1,
         hash: null,
         timestamp: 0,
@@ -258,8 +245,9 @@ class BlockCacheService {
     let blockRaw = await ipcExec('getblock', [hash, false]);
     let block = BlockModel.fromRaw(blockRaw, 'hex');
 
+    console.log('before');
     const txs = await transformBlockTxs(block.txs);
-
+    console.log('after');
     return {
       network: config.node.network,
       number: this.currentHeight,
@@ -280,14 +268,9 @@ class BlockCacheService {
     return this.currentHeight >= count - config.consensus.lastBlocksValidateAmount;
   }
 
-  async isCheckpointReached () {
-    const count = await ipcExec('getblockcount', []);
-    return this.checkpointHeight <= count;
-  }
-
   async validateUTXO () {
     let blocks = await blockModel.find({$where: 'obj.txs.length > 0'}, {number: 1}).sort({number: -1}).limit(config.consensus.lastBlocksValidateAmount);
-    blocks = _.map(blocks, block=>block.number);
+    blocks = _.map(blocks, block => block.number);
     const UTXOcount = await utxoModel.count({blockNumber: {$in: blocks}});
     return UTXOcount >= blocks.length;
   }
