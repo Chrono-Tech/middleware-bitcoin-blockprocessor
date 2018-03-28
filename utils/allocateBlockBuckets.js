@@ -43,7 +43,7 @@ module.exports = async function () {
   for (let i = currentCacheHeight + 1; i < currentNodeHeight - config.consensus.lastBlocksValidateAmount; i++)
     missedBlocks.push(i);
 
-  missedBuckets = _.chain(missedBlocks).reverse().chunk(10000).value();
+  missedBuckets = _.chain(missedBlocks).reverse().uniq().chunk(10000).value();
 
   if (currentNodeHeight === -1)
     return Promise.reject({code: 0});

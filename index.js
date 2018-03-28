@@ -36,20 +36,6 @@ sock.on('close', () => {
 
 const syncCacheService = new SyncCacheService();
 
-/*syncCacheService.events.on('block', async block => {
- log.info(`${block.hash} (${block.number}) added to cache.`);
- const filteredTxs = await filterTxsByAccountService(block.transactions);
-
- for (let tx of filteredTxs) {
- let addresses = _.chain([tx.to, tx.from])
- .union(tx.logs.map(log => log.address))
- .uniq()
- .value();
-
- for (let address of addresses)
- await channel.publish('events', `${config.rabbit.serviceName}_transaction.${address}`, new Buffer(JSON.stringify(tx)));
- }
- });*/
 
 [mongoose.accounts, mongoose.connection].forEach(connection =>
   connection.on('disconnected', function () {

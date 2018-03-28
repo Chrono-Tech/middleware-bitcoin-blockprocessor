@@ -1,9 +1,7 @@
 const config = require('../config'),
-  Promise = require('bluebird'),
   ipcExec = require('../services/ipcExec'),
   transformBlockTxs = require('./transformBlockTxs'),
-  BlockModel = require('bcoin/lib/primitives/block'),
-  _ = require('lodash');
+  BlockModel = require('bcoin/lib/primitives/block');
 
 module.exports = async (blockNumber) => {
 
