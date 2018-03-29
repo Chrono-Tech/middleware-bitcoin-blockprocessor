@@ -26,7 +26,7 @@ const Block = new mongoose.Schema({
       address: {type: String, index: true}
     }]
   }],
-  network: {type: String},
+  network: {type: String, index: true},
   created: {type: Date, required: true, default: Date.now}
 });
 

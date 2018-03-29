@@ -8,8 +8,8 @@ const _ = require('lodash'),
 
 module.exports = async function () {
 
-  const currentBlocks = await blockModel.find({network: config.node.network}).sort('-number').limit(1);
-  const currentCacheHeight = _.chain(currentBlocks).get('0.number', -1).value();
+  const currentBlock = await blockModel.findOne({network: config.node.network}, {number: 1}, {sort: {number: -1}});
+  const currentCacheHeight = _.get(currentBlock, 'number', -1);
 
   let blockNumbers = [];
   for (let i = 0; i < currentCacheHeight; i++)
