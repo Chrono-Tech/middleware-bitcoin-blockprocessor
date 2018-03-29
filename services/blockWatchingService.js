@@ -123,8 +123,7 @@ class blockWatchingService {
       await utxoModel.remove({
         $or: input.map(item => ({
           hash: item.hash,
-          index: item.index,
-          blockNumber: block.number
+          index: item.index
         }))
       });
       await utxoModel.insertMany(input);

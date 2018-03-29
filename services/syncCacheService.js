@@ -89,8 +89,7 @@ class SyncCacheService {
           await utxoModel.remove({
             $or: utxo.map(item => ({
               hash: item.hash,
-              index: item.index,
-              blockNumber: block.number
+              index: item.index
             }))
           });
 
