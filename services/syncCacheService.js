@@ -25,9 +25,17 @@ class SyncCacheService {
   }
 
   async start () {
+    await this.indexCollection();
     let data = await allocateBlockBuckets();
     this.doJob(data.missedBuckets);
     return data.height;
+  }
+
+  async indexCollection () {
+    log.info('indexing...');
+    await blockModel.init();
+    await utxoModel.init();
+    log.info('indexation completed!');
   }
 
   async doJob (buckets) {

@@ -36,7 +36,6 @@ class blockWatchingService {
       return;
 
     this.isSyncing = true;
-    await this.indexCollection();
 
     const mempool = await ipcExec('getrawmempool', []);
     if (!mempool.length)
@@ -252,12 +251,6 @@ class blockWatchingService {
       txs: txs,
       timestamp: block.time || Date.now(),
     };
-  }
-
-  async indexCollection () {
-    log.info('indexing...');
-    await blockModel.init();
-    log.info('indexation completed!');
   }
 
   async isSynced () {
