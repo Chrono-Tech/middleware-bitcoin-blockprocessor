@@ -15,8 +15,8 @@ This module is used for watching new blocks and txs for registered on platform u
 
 #### How does it work?
 
-Block processor - is a full node. It process blocks
-from the specified network, and notify users about new incoming blocks and transactions.
+Block processor - acts as a cache and notification system: It process blocks
+from the specified network, notify users about new incoming blocks and transactions, and store blocks and all utxo in mongo.
 
 #### Why do we use rabbitmq?
 
@@ -61,8 +61,10 @@ RABBIT_URI=amqp://localhost:5672
 RABBIT_SERVICE_NAME=app_bitcoin
 MONGO_COLLECTION_PREFIX=bitcoin
 NETWORK=regtest
-DB_DRIVER=leveldb
-DB_PATH=./db
+CONSENSUS_BLOCK_VALIDATE_AMOUNT=12
+SYNC_SHADOW=1
+ZMQ=tcp://127.0.0.1:43332
+NETWORK=testnet
 IPC_NAME=bitcoin
 IPC_PATH=/tmp/
 ```
@@ -76,10 +78,15 @@ The options are presented below:
 | RABBIT_SERVICE_NAME   | rabbitmq queues prefix
 | MONGO_COLLECTION_PREFIX   | the prefix name for all created collections, like for Account model - it will be called (in our case) bitcoinAccount
 | NETWORK   | network name (alias)- is used for connecting via ipc (regtest, main, testnet, bcc)
-| DB_DRIVER   | bitcoin database driver (leveldb or memory)
-| DB_PATH   | path where to store db (with memory db you can skip this option)
+| CONSENSUS_BLOCK_VALIDATE_AMOUNT   | validate last blocks (by hash), in order to make sure, that last blocks hasn't been dropped
+| SYNC_SHADOW   | sync blocks in background
 | IPC_NAME   | ipc file name
 | IPC_PATH   | directory, where to store ipc file (you can skip this option on windows)
+
+### ipc node
+
+For the moment, block processor has only the ipc interface support, and as a result, you need to run a full bcoin node with ipc support. You can grab it [here](https://github.com/ChronoBank/bcoin-ipc-node).
+
 
 ### supported networks
 
@@ -90,10 +97,12 @@ The actual network could be set with NETWORK param. All supported networks are p
 | main   | bitcoin mainnet
 | testnet   | bitcoin testnet
 | regtest   | bitcoin regtest network
-| bcc   | bitcoin cash mainnet
-| bcctest   | bitcoin cash testnet
 | btg   | bitcoin gold mainnet
 | btgtest   | bitcoin gold testnet
+| bcc   | bitcoin cash mainnet
+| bcctest   | bitcoin cash testnet
+| litecoin   | litecoin mainnet
+| litecointest   | litecoin testnet
 
 
 License
