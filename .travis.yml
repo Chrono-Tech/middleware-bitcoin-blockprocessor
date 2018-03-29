@@ -44,10 +44,10 @@ after_success:
   - IMAGE_TAG_NAME="latest"
   - |
     if [ "$TRAVIS_BRANCH" == "master" ]; then
-      docker build --quiet -t gcr.io/deep-wares-144610/$TRAVIS_BRANCH/middleware-bitcoin:$IMAGE_TAG_NAME --build-arg RELEASE=latest --build-arg COIN=bitcoin .
+      travis_wait 30 docker build -t gcr.io/deep-wares-144610/$TRAVIS_BRANCH/middleware-bitcoin:$IMAGE_TAG_NAME --build-arg RELEASE=latest --build-arg COIN=bitcoin .
       docker push gcr.io/deep-wares-144610/$TRAVIS_BRANCH/middleware-bitcoin:$IMAGE_TAG_NAME
     elif [ "$TRAVIS_BRANCH" == "develop" ]; then
-      docker build --quiet -t gcr.io/deep-wares-144610/$TRAVIS_BRANCH/middleware-bitcoin:$IMAGE_TAG_NAME --build-arg RELEASE=develop --build-arg COIN=bitcoin .
+      travis_wait 30 docker build -t gcr.io/deep-wares-144610/$TRAVIS_BRANCH/middleware-bitcoin:$IMAGE_TAG_NAME --build-arg RELEASE=develop --build-arg COIN=bitcoin .
       docker push gcr.io/deep-wares-144610/$TRAVIS_BRANCH/middleware-bitcoin:$IMAGE_TAG_NAME
     fi;
 
