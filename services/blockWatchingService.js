@@ -59,9 +59,6 @@ class blockWatchingService {
 
       try {
 
-        /*        if (!(await this.validateUTXO()))
-         await Promise.reject({code: 1});*/
-
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
         await this.updateDbStateWithBlock(block);
 
@@ -143,16 +140,20 @@ class blockWatchingService {
     );
 
     await utxoModel.remove({$or: toRemove});
-    await blockModel.update({number: block.number}, block, {upsert: true});
+    const mempool = await ipcExec('getrawmempool', []);
+
     await blockModel.update({number: -1}, {
       $pull: {
         txs: {
           hash: {
-            $in: block.txs.map(tx => tx.hash)
+            $nin: mempool
           }
         }
       }
     });
+
+    await blockModel.update({number: block.number}, block, {upsert: true});
+
 
   }
 
@@ -197,23 +198,17 @@ class blockWatchingService {
 
   async UnconfirmedTxEvent (tx) {
 
-    if (!await this.isSynced())
-      return;
-
     tx = TX.fromRaw(tx, 'hex');
 
-    const mempool = await ipcExec('getrawmempool', []);
-    let currentUnconfirmedBlock = await
-      blockModel.findOne({number: -1}) || new blockModel({
-        number: -1,
-        hash: null,
-        timestamp: 0,
-        txs: []
-      });
+    let currentUnconfirmedBlock = await blockModel.findOne({number: -1}) || new blockModel({
+      number: -1,
+      hash: null,
+      timestamp: 0,
+      txs: []
+    });
 
     const fullTx = await transformBlockTxs([tx]);
-    let alreadyIncludedTxs = _.filter(currentUnconfirmedBlock.txs, tx => mempool.includes(tx.hash));
-    currentUnconfirmedBlock.txs = _.union(alreadyIncludedTxs, fullTx);
+    currentUnconfirmedBlock.txs = _.union(currentUnconfirmedBlock.txs, fullTx);
     await blockModel.findOneAndUpdate({number: -1}, _.omit(currentUnconfirmedBlock.toObject(), '_id', '__v'), {upsert: true});
     this.events.emit('tx', _.get(fullTx, 0));
   }
@@ -251,11 +246,6 @@ class blockWatchingService {
       txs: txs,
       timestamp: block.time || Date.now(),
     };
-  }
-
-  async isSynced () {
-    const count = await ipcExec('getblockcount', []);
-    return this.currentHeight >= count - config.consensus.lastBlocksValidateAmount;
   }
 
   async validateUTXO () {
