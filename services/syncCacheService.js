@@ -84,20 +84,26 @@ class SyncCacheService {
       await Promise.mapSeries(newChunkToLock, async (blockNumber) => {
         let block = await getBlock(blockNumber);
         let utxo = await getUTXO(block);
-        await utxoModel.remove({
-          $or: utxo.map(item => ({
-            hash: item.hash,
-            index: item.index,
-            blockNumber: block.number
-          }))
-        });
-        await utxoModel.insertMany(utxo);
+
+        if (utxo.length) {
+          await utxoModel.remove({
+            $or: utxo.map(item => ({
+              hash: item.hash,
+              index: item.index,
+              blockNumber: block.number
+            }))
+          });
+
+          await utxoModel.insertMany(utxo);
+        }
+
         await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
         _.pull(newChunkToLock, blockNumber);
         this.events.emit('block', block);
       }).catch((e) => {
         if (e && e.code === 11000)
-          _.pull(newChunkToLock, newChunkToLock[0]);
+          return _.pull(newChunkToLock, newChunkToLock[0]);
+        log.error(e);
       });
 
       if (!newChunkToLock.length)
