@@ -41,14 +41,8 @@ class blockWatchingService {
     if (!mempool.length)
       await blockModel.remove({number: -1});
 
-    const currentBlocks = await blockModel.find({
-      network: config.node.network,
-      timestamp: {$ne: 0},
-      number: {$lte: this.currentHeight}
-    }).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
-    //this.currentHeight = _.chain(currentBlocks).get('0.number', -1).value();
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
-    this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).compact().reverse().value();
+    this.lastBlocks = [];
     this.doJob();
     this.sock.on('message', this.pendingTxCallback);
   }
@@ -80,7 +74,7 @@ class blockWatchingService {
         }
 
         if ([1, 11000].includes(_.get(err, 'code'))) {
-          let lastCheckpointBlock = await blockModel.findOne({hash: this.lastBlocks[0]});
+          let lastCheckpointBlock = await blockModel.findOne(this.lastBlocks[0] ? {hash: this.lastBlocks[0]} : {number: this.currentHeight - 1});
           log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
           await this.rollbackStateFromBlock(lastCheckpointBlock);
           const currentBlocks = await blockModel.find({
@@ -181,6 +175,13 @@ class blockWatchingService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
+        await utxoModel.remove({
+          $or: input.map(item => ({
+            hash: item.hash,
+            index: item.index,
+            blockNumber: block.number
+          }))
+        });
       await utxoModel.insertMany(input, {ordered: false});
       processed += input.length;
       log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
@@ -241,7 +242,7 @@ class blockWatchingService {
 
     return {
       network: config.node.network,
-      number: this.currentHeight,
+      number: this.currentHeight + 1,
       hash: block.rhash(),
       txs: txs,
       timestamp: block.time || Date.now(),
