@@ -55,7 +55,7 @@ class blockWatchingService {
       try {
 
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
-        await new Promise.promisify(addBlock.bind(null, block, 1));
+        await new Promise.promisify(addBlock.bind(null, block, 1))();
 
         this.currentHeight++;
         _.pullAt(this.lastBlocks, 0);
@@ -75,16 +75,12 @@ class blockWatchingService {
         }
 
         if ([1, 11000].includes(_.get(err, 'code'))) {
-          let lastCheckpointBlock = await blockModel.findOne(this.lastBlocks[0] ? {hash: this.lastBlocks[0]} : {number: this.currentHeight - 1});
-          log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
-          await this.rollbackStateFromBlock(lastCheckpointBlock);
           const currentBlocks = await blockModel.find({
             network: config.node.network,
-            timestamp: {$ne: 0},
-            number: {$lt: lastCheckpointBlock.number}
-          }).sort('-number').limit(config.consensus.lastBlocksValidateAmount);
+            timestamp: {$ne: 0}
+          }, {}, {number: -1}).limit(config.consensus.lastBlocksValidateAmount);
           this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).reverse().value();
-          this.currentHeight = lastCheckpointBlock.number;
+          this.currentHeight = _.get(currentBlocks, '0.number', 0);
           continue;
         }
 
@@ -92,61 +88,6 @@ class blockWatchingService {
           log.error(err);
       }
     }
-
-  }
-
-  async updateDbStateWithBlock (block) {
-
-    const toRemove = _.chain(block.txs)
-      .map(tx => tx.inputs)
-      .flattenDeep()
-      .map(input => input.prevout)
-      .value();
-
-    const toCreate = _.chain(block.txs)
-      .map(tx =>
-        tx.outputs.map((output, index) =>
-          _.merge(output, {hash: tx.hash, index: index, blockNumber: block.number})
-        )
-      )
-      .flattenDeep()
-      .reject(output =>
-        _.find(toRemove, {hash: output.hash, index: output.index})
-      )
-      .value();
-
-    log.info('updating utxos for block: ', block.number);
-
-    const chunks = _.chunk(toCreate, 50);
-
-    let processed = 0;
-    await Promise.mapSeries(chunks, async input => {
-        await utxoModel.remove({
-          $or: input.map(item => ({
-            hash: item.hash,
-            index: item.index
-          }))
-        });
-        await utxoModel.insertMany(input);
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-      }
-    );
-
-    await utxoModel.remove({$or: toRemove});
-    const mempool = await ipcExec('getrawmempool', []);
-
-    await blockModel.update({number: -1}, {
-      $pull: {
-        txs: {
-          hash: {
-            $nin: mempool
-          }
-        }
-      }
-    });
-
-    await blockModel.update({number: block.number}, block, {upsert: true});
 
   }
 
@@ -246,13 +187,6 @@ class blockWatchingService {
       txs: txs,
       timestamp: block.time || Date.now(),
     };
-  }
-
-  async validateUTXO () {
-    let blocks = await blockModel.find({$where: 'obj.txs.length > 0'}, {number: 1}).sort({number: -1}).limit(config.consensus.lastBlocksValidateAmount);
-    blocks = _.map(blocks, block => block.number);
-    const UTXOcount = await utxoModel.count({blockNumber: {$in: blocks}});
-    return UTXOcount >= blocks.length;
   }
 
 }

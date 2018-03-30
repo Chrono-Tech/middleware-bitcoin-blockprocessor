@@ -3,7 +3,6 @@ const bunyan = require('bunyan'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
   ipcExec = require('../services/ipcExec'),
-  getUTXO = require('../utils/getUTXO'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
   blockModel = require('../models/blockModel'),
   utxoModel = require('../models/utxoModel'),
@@ -84,7 +83,7 @@ class SyncCacheService {
       locker.stack[index] = newChunkToLock;
       await Promise.mapSeries(newChunkToLock, async (blockNumber) => {
         let block = await getBlock(blockNumber);
-        await new Promise.promisify(addBlock.bind(null, block, 0));
+        await new Promise.promisify(addBlock.bind(null, block, 0))();
 
         _.pull(newChunkToLock, blockNumber);
         this.events.emit('block', block);
