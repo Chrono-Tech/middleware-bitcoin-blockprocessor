@@ -55,7 +55,6 @@ class blockWatchingService {
       try {
 
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
-        // await this.updateDbStateWithBlock(block);
         await new Promise.promisify(addBlock.bind(null, block, 1));
 
         this.currentHeight++;
