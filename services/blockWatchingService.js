@@ -3,6 +3,7 @@ const config = require('../config'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   TX = require('bcoin/lib/primitives/tx'),
+  addBlock = require('../utils/addBlock'),
   blockModel = require('../models/blockModel'),
   utxoModel = require('../models/utxoModel'),
   EventEmitter = require('events'),
@@ -54,7 +55,8 @@ class blockWatchingService {
       try {
 
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
-        await this.updateDbStateWithBlock(block);
+        // await this.updateDbStateWithBlock(block);
+        await new Promise.promisify(addBlock.bind(null, block, 1));
 
         this.currentHeight++;
         _.pullAt(this.lastBlocks, 0);
@@ -120,16 +122,16 @@ class blockWatchingService {
 
     let processed = 0;
     await Promise.mapSeries(chunks, async input => {
-      await utxoModel.remove({
-        $or: input.map(item => ({
-          hash: item.hash,
-          index: item.index
-        }))
-      });
-      await utxoModel.insertMany(input);
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-    }
+        await utxoModel.remove({
+          $or: input.map(item => ({
+            hash: item.hash,
+            index: item.index
+          }))
+        });
+        await utxoModel.insertMany(input);
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+      }
     );
 
     await utxoModel.remove({$or: toRemove});
@@ -146,7 +148,6 @@ class blockWatchingService {
     });
 
     await blockModel.update({number: block.number}, block, {upsert: true});
-
 
   }
 
@@ -181,10 +182,10 @@ class blockWatchingService {
             blockNumber: block.number
           }))
         });
-      await utxoModel.insertMany(input, {ordered: false});
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-    }
+        await utxoModel.insertMany(input, {ordered: false});
+        processed += input.length;
+        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+      }
     );
 
     await utxoModel.remove({blockNumber: {$gte: block.number}});
@@ -201,11 +202,11 @@ class blockWatchingService {
     tx = TX.fromRaw(tx, 'hex');
 
     let currentUnconfirmedBlock = await blockModel.findOne({number: -1}) || new blockModel({
-      number: -1,
-      hash: null,
-      timestamp: 0,
-      txs: []
-    });
+        number: -1,
+        hash: null,
+        timestamp: 0,
+        txs: []
+      });
 
     const fullTx = await transformBlockTxs([tx]);
     currentUnconfirmedBlock.txs = _.union(currentUnconfirmedBlock.txs, fullTx);

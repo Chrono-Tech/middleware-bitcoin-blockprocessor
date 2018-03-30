@@ -34,8 +34,6 @@ sock.on('close', () => {
   process.exit(0);
 });
 
-const syncCacheService = new SyncCacheService();
-
 
 [mongoose.accounts, mongoose.connection].forEach(connection =>
   connection.on('disconnected', function () {
@@ -65,6 +63,9 @@ const init = async function () {
     log.error(e);
     channel = await amqpConn.createChannel();
   }
+
+  const syncCacheService = new SyncCacheService();
+
 
   syncCacheService.events.on('block', async block => {
     log.info(`${block.hash} (${block.number}) added to cache.`);
