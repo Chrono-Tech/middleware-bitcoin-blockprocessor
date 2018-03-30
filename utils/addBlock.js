@@ -7,8 +7,7 @@ const config = require('../config'),
   getUTXO = require('../utils/getUTXO'),
   utxoModel = require('../models/utxoModel'),
   ipcExec = require('../services/ipcExec'),
-  log = bunyan.createLogger({name: 'app.services.blockWatchingService'}),
-  transformBlockTxs = require('../utils/transformBlockTxs');
+  log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
 
 /**
  * @service
@@ -17,24 +16,35 @@ const config = require('../config'),
  * @returns {Promise.<*>}
  */
 
-const addBlock = async (block, type, res) => {
+const addBlock = async (block, type, callback) => {
 
-  if (type === 0)
-    sem.take(async () => {
-      await updateDbStateWithBlockDOWN(block);
-      res();
-      sem.leave();
-    });
+  sem.take(async () => {
+    try {
+      type === 0 ?
+        await updateDbStateWithBlockDOWN(block) :
+        await updateDbStateWithBlockUP(block);
 
-  if (type === 1)
-    sem.take(async () => {
-      await updateDbStateWithBlockUP(block);
-      res();
-      sem.leave();
-    });
+      callback();
+    } catch (e) {
+      if (type === 1 && [1, 11000].includes(_.get(err, 'code'))) {
+        let lastCheckpointBlock = await blockModel.findOne({
+          number: {
+            $lte: block.number - 1,
+            $gte: block.number - 1 + config.consensus.lastBlocksValidateAmount
+          }
+        }, {}, {number: -1});
+        log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
+        await rollbackStateFromBlock(lastCheckpointBlock);
+      }
+
+      callback(e, null);
+
+    }
+
+    sem.leave();
+  });
 
 };
-
 
 const updateDbStateWithBlockUP = async (block) => {
 
@@ -91,8 +101,7 @@ const updateDbStateWithBlockUP = async (block) => {
 
 };
 
-
-const rollbackStateFromBlock = async (block)=> {
+const rollbackStateFromBlock = async (block) => {
 
   const blocksToDelete = await blockModel.find({
     $or: [
@@ -138,8 +147,7 @@ const rollbackStateFromBlock = async (block)=> {
   });
 };
 
-
-const updateDbStateWithBlockDOWN = async (block)=> {
+const updateDbStateWithBlockDOWN = async (block) => {
 
   let utxo = await getUTXO(block);
 
@@ -157,6 +165,5 @@ const updateDbStateWithBlockDOWN = async (block)=> {
   await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
 
 };
-
 
 module.exports = addBlock;
