@@ -114,7 +114,7 @@ class blockWatchingService {
 
   async processBlock () {
 
-    let hash = await ipcExec('getblockhash', [this.currentHeight + 1]);
+    let hash = await ipcExec('getblockhash', [this.currentHeight]);
     if (!hash) {
       return Promise.reject({code: 0});
     }
@@ -135,7 +135,7 @@ class blockWatchingService {
 
     return {
       network: config.node.network,
-      number: this.currentHeight + 1,
+      number: this.currentHeight,
       hash: block.rhash(),
       txs: txs,
       timestamp: block.time || Date.now(),
