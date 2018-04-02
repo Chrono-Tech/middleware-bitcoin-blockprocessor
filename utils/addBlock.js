@@ -25,19 +25,19 @@ const addBlock = async (block, type, callback) => {
         await updateDbStateWithBlockUP(block);
 
       callback();
-    } catch (e) {
+    } catch (err) {
       if (type === 1 && [1, 11000].includes(_.get(err, 'code'))) {
         let lastCheckpointBlock = await blockModel.findOne({
           number: {
             $lte: block.number - 1,
             $gte: block.number - 1 + config.consensus.lastBlocksValidateAmount
           }
-        }, {}, {number: -1});
+        }).sort({number: -1});
         log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
         await rollbackStateFromBlock(lastCheckpointBlock);
       }
 
-      callback(e, null);
+      callback(err, null);
 
     }
 
