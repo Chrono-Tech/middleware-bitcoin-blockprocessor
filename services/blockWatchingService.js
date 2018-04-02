@@ -78,7 +78,7 @@ class blockWatchingService {
           const currentBlocks = await blockModel.find({
             network: config.node.network,
             timestamp: {$ne: 0}
-          }, {}, {number: -1}).limit(config.consensus.lastBlocksValidateAmount);
+          }).sort({number: -1}).limit(config.consensus.lastBlocksValidateAmount);
           this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).reverse().value();
           this.currentHeight = _.get(currentBlocks, '0.number', 0);
           continue;
