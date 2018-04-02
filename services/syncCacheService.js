@@ -3,11 +3,11 @@ const bunyan = require('bunyan'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
   ipcExec = require('../services/ipcExec'),
-  getUTXO = require('../utils/getUTXO'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
   blockModel = require('../models/blockModel'),
   utxoModel = require('../models/utxoModel'),
   getBlock = require('../utils/getBlock'),
+  addBlock = require('../utils/addBlock'),
   log = bunyan.createLogger({name: 'app.services.syncCacheService'});
 
 /**
@@ -83,20 +83,8 @@ class SyncCacheService {
       locker.stack[index] = newChunkToLock;
       await Promise.mapSeries(newChunkToLock, async (blockNumber) => {
         let block = await getBlock(blockNumber);
-        let utxo = await getUTXO(block);
+        await new Promise.promisify(addBlock.bind(null, block, 0))();
 
-        if (utxo.length) {
-          await utxoModel.remove({
-            $or: utxo.map(item => ({
-              hash: item.hash,
-              index: item.index
-            }))
-          });
-
-          await utxoModel.insertMany(utxo);
-        }
-
-        await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
         _.pull(newChunkToLock, blockNumber);
         this.events.emit('block', block);
       }).catch((e) => {
