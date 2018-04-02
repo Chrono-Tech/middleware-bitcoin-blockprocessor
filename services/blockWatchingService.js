@@ -5,7 +5,6 @@ const config = require('../config'),
   TX = require('bcoin/lib/primitives/tx'),
   addBlock = require('../utils/addBlock'),
   blockModel = require('../models/blockModel'),
-  utxoModel = require('../models/utxoModel'),
   EventEmitter = require('events'),
   ipcExec = require('../services/ipcExec'),
   BlockModel = require('bcoin/lib/primitives/block'),
@@ -78,7 +77,7 @@ class blockWatchingService {
           const currentBlocks = await blockModel.find({
             network: config.node.network,
             timestamp: {$ne: 0}
-          }, {}, {number: -1}).limit(config.consensus.lastBlocksValidateAmount);
+          }).sort({number: -1}).limit(config.consensus.lastBlocksValidateAmount);
           this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).reverse().value();
           this.currentHeight = _.get(currentBlocks, '0.number', 0);
           continue;
@@ -89,52 +88,6 @@ class blockWatchingService {
       }
     }
 
-  }
-
-  async rollbackStateFromBlock (block) {
-
-    const blocksToDelete = await blockModel.find({
-      $or: [
-        {hash: {$in: this.lastBlocks}},
-        {number: {$gte: block.number}}
-      ]
-    });
-
-    const toCreate = _.chain(blocksToDelete)
-      .map(block => block.toObject().txs)
-      .flattenDeep()
-      .map(tx => tx.inputs)
-      .flattenDeep()
-      .map(input => _.merge(input.prevout, {address: input.address, value: input.value, blockNumber: block.number}))
-      .uniqWith(_.isEqual)
-      .value();
-
-    log.info('rollback utxos from block: ', block.number);
-
-    const chunks = _.chunk(toCreate, 50);
-
-    let processed = 0;
-    await Promise.mapSeries(chunks, async input => {
-        await utxoModel.remove({
-          $or: input.map(item => ({
-            hash: item.hash,
-            index: item.index,
-            blockNumber: block.number
-          }))
-        });
-        await utxoModel.insertMany(input, {ordered: false});
-        processed += input.length;
-        log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-      }
-    );
-
-    await utxoModel.remove({blockNumber: {$gte: block.number}});
-    await blockModel.remove({
-      $or: [
-        {hash: {$in: this.lastBlocks}},
-        {number: {$gte: block.number}}
-      ]
-    });
   }
 
   async UnconfirmedTxEvent (tx) {
