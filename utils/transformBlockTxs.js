@@ -1,5 +1,4 @@
 const config = require('../config'),
-  blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   Promise = require('bluebird'),
   Network = require('bcoin/lib/protocol/network'),
@@ -30,7 +29,7 @@ module.exports = async (txs) => {
     return await txModel.find({hash: {$in: inputHashesChunk}}, {
       'outputs.value': 1,
       'hash': 1
-    })
+    });
   });
 
   txsWithInputs = _.flattenDeep(txsWithInputs);

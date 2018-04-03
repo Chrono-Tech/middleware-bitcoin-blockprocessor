@@ -73,16 +73,16 @@ const updateDbStateWithBlockUP = async (block) => {
 
   let processed = 0;
   await Promise.mapSeries(chunks, async input => {
-      await utxoModel.remove({
-        $or: input.map(item => ({
-          hash: item.hash,
-          index: item.index
-        }))
-      });
-      await utxoModel.insertMany(input);
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-    }
+    await utxoModel.remove({
+      $or: input.map(item => ({
+        hash: item.hash,
+        index: item.index
+      }))
+    });
+    await utxoModel.insertMany(input);
+    processed += input.length;
+    log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+  }
   );
   const mempool = await ipcExec('getrawmempool', []);
 
@@ -123,17 +123,17 @@ const rollbackStateFromBlock = async (block) => {
 
   let processed = 0;
   await Promise.mapSeries(chunks, async input => {
-      await utxoModel.remove({
-        $or: input.map(item => ({
-          hash: item.hash,
-          index: item.index,
-          blockNumber: block.number
-        }))
-      });
-      await utxoModel.insertMany(input, {ordered: false});
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-    }
+    await utxoModel.remove({
+      $or: input.map(item => ({
+        hash: item.hash,
+        index: item.index,
+        blockNumber: block.number
+      }))
+    });
+    await utxoModel.insertMany(input, {ordered: false});
+    processed += input.length;
+    log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+  }
   );
 
   await utxoModel.remove({blockNumber: {$gte: block.number}});
