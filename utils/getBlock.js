@@ -13,7 +13,12 @@ module.exports = async (blockNumber) => {
   let blockRaw = await ipcExec('getblock', [hash, false]);
   let block = BlockModel.fromRaw(blockRaw, 'hex');
 
-  const txs = await transformBlockTxs(block.txs);
+  let txs = await transformBlockTxs(block.txs);
+  txs = txs.map(tx => {
+    tx.blockNumber = blockNumber;
+    tx.timestamp = block.time || Date.now();
+    return tx;
+  });
 
   return {
     network: config.node.network,

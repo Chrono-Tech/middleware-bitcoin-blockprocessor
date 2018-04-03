@@ -5,9 +5,10 @@ const config = require('../config'),
   TX = require('bcoin/lib/primitives/tx'),
   addBlock = require('../utils/addBlock'),
   blockModel = require('../models/blockModel'),
+  txModel = require('../models/txModel'),
   EventEmitter = require('events'),
   ipcExec = require('../services/ipcExec'),
-  BlockModel = require('bcoin/lib/primitives/block'),
+  getBlock = require('../utils/getBlock'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'}),
   transformBlockTxs = require('../utils/transformBlockTxs');
 
@@ -39,7 +40,7 @@ class blockWatchingService {
 
     const mempool = await ipcExec('getrawmempool', []);
     if (!mempool.length)
-      await blockModel.remove({number: -1});
+      await txModel.remove({blockNumber: -1});
 
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
     this.lastBlocks = [];
@@ -94,17 +95,9 @@ class blockWatchingService {
 
     tx = TX.fromRaw(tx, 'hex');
 
-    let currentUnconfirmedBlock = await blockModel.findOne({number: -1}) || new blockModel({
-        number: -1,
-        hash: null,
-        timestamp: 0,
-        txs: []
-      });
-
-    const fullTx = await transformBlockTxs([tx]);
-    currentUnconfirmedBlock.txs = _.union(currentUnconfirmedBlock.txs, fullTx);
-    await blockModel.findOneAndUpdate({number: -1}, _.omit(currentUnconfirmedBlock.toObject(), '_id', '__v'), {upsert: true});
-    this.events.emit('tx', _.get(fullTx, 0));
+    const fullTx = (await transformBlockTxs([tx]))[0];
+    await txModel.findOneAndUpdate({blockNumber: -1, hash: fullTx.hash}, fullTx, {upsert: true, setDefaultsOnInsert: true});
+    this.events.emit('tx', fullTx);
   }
 
   async stopSync () {
@@ -129,17 +122,7 @@ class blockWatchingService {
     if (validatedBlocks.length !== this.lastBlocks.length)
       return Promise.reject({code: 1}); //head has been blown off
 
-    let blockRaw = await ipcExec('getblock', [hash, false]);
-    let block = BlockModel.fromRaw(blockRaw, 'hex');
-    const txs = await transformBlockTxs(block.txs);
-
-    return {
-      network: config.node.network,
-      number: this.currentHeight,
-      hash: block.rhash(),
-      txs: txs,
-      timestamp: block.time || Date.now(),
-    };
+    return getBlock(this.currentHeight);
   }
 
 }
