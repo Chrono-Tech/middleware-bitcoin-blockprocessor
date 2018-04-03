@@ -6,6 +6,7 @@ const config = require('../config'),
   blockModel = require('../models/blockModel'),
   getUTXO = require('../utils/getUTXO'),
   utxoModel = require('../models/utxoModel'),
+  txModel = require('../models/txModel'),
   ipcExec = require('../services/ipcExec'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
 
@@ -83,20 +84,17 @@ const updateDbStateWithBlockUP = async (block) => {
       log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
     }
   );
-
-  await utxoModel.remove({$or: toRemove});
   const mempool = await ipcExec('getrawmempool', []);
 
-  await blockModel.update({number: -1}, {
-    $pull: {
-      txs: {
-        hash: {
-          $nin: mempool
-        }
-      }
-    }
+  await utxoModel.remove({$or: toRemove});
+  await txModel.remove({
+    $or: [
+      {hash: {$in: block.txs.map(tx => tx.hash)}},
+      {number: -1, hash: {$nin: mempool}}
+    ]
   });
 
+  await txModel.insertMany(block.txs);
   await blockModel.update({number: block.number}, block, {upsert: true});
 
 };
@@ -139,6 +137,7 @@ const rollbackStateFromBlock = async (block) => {
   );
 
   await utxoModel.remove({blockNumber: {$gte: block.number}});
+  await txModel.remove({blockNumber: {$gte: block.number}});
   await blockModel.remove({
     $or: [
       {hash: {$lte: block.number, $gte: block.number - config.consensus.lastBlocksValidateAmount}},
@@ -162,6 +161,8 @@ const updateDbStateWithBlockDOWN = async (block) => {
     await utxoModel.insertMany(utxo);
   }
 
+  await txModel.remove({hash: {$in: block.txs.map(tx => tx.hash)}});
+  await txModel.insertMany(block.txs);
   await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
 
 };

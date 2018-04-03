@@ -88,6 +88,7 @@ class SyncCacheService {
         _.pull(newChunkToLock, blockNumber);
         this.events.emit('block', block);
       }).catch((e) => {
+        console.log(e)
         if (e && e.code === 11000)
           return _.pull(newChunkToLock, newChunkToLock[0]);
         log.error(e);
