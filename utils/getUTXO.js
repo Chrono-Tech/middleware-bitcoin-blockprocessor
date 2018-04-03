@@ -1,5 +1,5 @@
 const Promise = require('bluebird'),
-  blockModel = require('../models/blockModel'),
+  txModel = require('../models/txModel'),
   _ = require('lodash');
 
 module.exports = async (block) => {
@@ -14,9 +14,9 @@ module.exports = async (block) => {
     .value();
 
   let outs = await Promise.map(toCreate, async output => {
-    let isSpent = await blockModel.count({
-      'txs.inputs.prevout.hash': output.hash,
-      'txs.inputs.prevout.index': output.index
+    let isSpent = await txModel.count({
+      'inputs.prevout.hash': output.hash,
+      'inputs.prevout.index': output.index
     });
     return isSpent ? null : output;
   });

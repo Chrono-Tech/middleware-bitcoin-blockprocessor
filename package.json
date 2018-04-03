@@ -22,7 +22,7 @@
     "eslint-plugin-chronobank": "github:chronobank/eslint-plugin-chronobank",
     "chai": "^4.1.1",
     "mocha": "^3.5.0",
-    "bcoin-ipc-node": "github:chronobank/bcoin-ipc-node#develop"
+    "bcoin-ipc-node": "github:chronobank/bcoin-ipc-node"
   },
   "scripts": {
     "lint": "node ./node_modules/eslint/bin/eslint.js -c .eslintrc.js --ext .js --fix --ignore-path .eslintignore .",
