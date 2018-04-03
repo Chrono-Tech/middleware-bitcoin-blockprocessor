@@ -48,6 +48,6 @@ module.exports = async function () {
   if (currentNodeHeight === -1)
     return Promise.reject({code: 0});
 
-  return {missedBuckets: missedBuckets, height: currentNodeHeight - config.consensus.lastBlocksValidateAmount};
+  return {missedBuckets: missedBuckets, height: currentNodeHeight - config.consensus.lastBlocksValidateAmount < 0 ? 0 : currentNodeHeight - config.consensus.lastBlocksValidateAmount };
 
 };
