@@ -1,3 +1,9 @@
+/**
+ * Copyright 2017–2018, LaborX PTY
+ * Licensed under the AGPL Version 3 license.
+ * @author Egor Zuev <zyev.egor@gmail.com>
+ */
+
 const config = require('../config'),
   bunyan = require('bunyan'),
   _ = require('lodash'),
@@ -13,36 +19,42 @@ const config = require('../config'),
 /**
  * @service
  * @description filter txs by registered addresses
- * @param block - an array of txs
+ * @param block - prepared block with full txs
+ * @param type - type of arrived block (is block from cache or it's the last block)
  * @returns {Promise.<*>}
  */
 
-const addBlock = async (block, type, callback) => {
+const addBlock = async (block, type) => {
 
-  sem.take(async () => {
-    try {
-      type === 0 ?
-        await updateDbStateWithBlockDOWN(block) :
-        await updateDbStateWithBlockUP(block);
+  return await new Promise((res, rej)=>{
 
-      callback();
-    } catch (err) {
-      if (type === 1 && [1, 11000].includes(_.get(err, 'code'))) {
-        let lastCheckpointBlock = await blockModel.findOne({
-          number: {
-            $lte: block.number - 1,
-            $gte: block.number - 1 + config.consensus.lastBlocksValidateAmount
-          }
-        }).sort({number: -1});
-        log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
-        await rollbackStateFromBlock(lastCheckpointBlock);
+    sem.take(async () => {
+      try {
+        type === 0 ?
+          await updateDbStateWithBlockDOWN(block) :
+          await updateDbStateWithBlockUP(block);
+
+        res();
+      } catch (err) {
+        if (type === 1 && [1, 11000].includes(_.get(err, 'code'))) {
+          let lastCheckpointBlock = await blockModel.findOne({
+            number: {
+              $lte: block.number - 1,
+              $gte: block.number - 1 + config.consensus.lastBlocksValidateAmount
+            }
+          }).sort({number: -1});
+          log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
+          await rollbackStateFromBlock(lastCheckpointBlock);
+        }
+
+        rej(err);
+
       }
 
-      callback(err, null);
+      sem.leave();
+    });
 
-    }
 
-    sem.leave();
   });
 
 };

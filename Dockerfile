@@ -2,6 +2,7 @@ FROM node:8
 ENV NETWORK_TYPE DEFAULT_NETWORK_TYPE
 ENV NPM_CONFIG_LOGLEVEL warn
 ARG RELEASE=latest
+ARG GITHUB_API_KEY=123
 
 RUN apt update && \
     apt install -y python make g++ git build-essential && \

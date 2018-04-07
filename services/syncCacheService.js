@@ -1,3 +1,9 @@
+/**
+ * Copyright 2017–2018, LaborX PTY
+ * Licensed under the AGPL Version 3 license.
+ * @author Egor Zuev <zyev.egor@gmail.com>
+ */
+
 const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
@@ -6,6 +12,7 @@ const bunyan = require('bunyan'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
   blockModel = require('../models/blockModel'),
   utxoModel = require('../models/utxoModel'),
+  txModel = require('../models/txModel'),
   getBlock = require('../utils/getBlock'),
   addBlock = require('../utils/addBlock'),
   log = bunyan.createLogger({name: 'app.services.syncCacheService'});
@@ -21,7 +28,6 @@ class SyncCacheService {
 
   constructor () {
     this.events = new EventEmitter();
-    this.isSyncing = true;
   }
 
   async start () {
@@ -35,70 +41,54 @@ class SyncCacheService {
     log.info('indexing...');
     await blockModel.init();
     await utxoModel.init();
+    await txModel.init();
     log.info('indexation completed!');
   }
 
   async doJob (buckets) {
 
-    while (this.isSyncing)
+    while (buckets.length)
       try {
-        let locker = {stack: {}, lock: false};
+        for (let bucket of buckets) {
+          await this.runPeer(bucket);
+          if (!bucket.length)
+            _.pull(buckets, bucket);
+        }
 
-        while (buckets.length)
-          await this.runPeer(buckets, locker, 1);
-
-        this.isSyncing = false;
         this.events.emit('end');
 
       } catch (err) {
+
+        if (err && err.code === 'ENOENT') {
+          log.error('ipc is not available');
+          process.exit(0);
+        }
+
         log.error(err);
       }
 
   }
 
-  async runPeer (buckets, locker, index) {
+  async runPeer (bucket) {
 
-    while (buckets.length) {
-      if (locker.lock) {
-        await Promise.delay(1000);
-        continue;
-      }
+    let lastBlock = await ipcExec('getblockhash', [_.last(bucket)]).catch(() => null);
 
-      locker.lock = true;
-      let lockerChunks = _.values(locker.stack);
-      let newChunkToLock = _.chain(buckets).reject(item =>
-        _.find(lockerChunks, lock => lock[0] === item[0])
-      ).head().value();
+    if (!lastBlock)
+      return await Promise.delay(10000);
 
-      let lastBlock = await ipcExec('getblockhash', [_.last(newChunkToLock)]).catch(() => null);
-      locker.lock = false;
+    log.info(`bitcoin provider took chuck of blocks ${bucket[0]} - ${_.last(bucket)}`);
 
-      if (!newChunkToLock || !lastBlock) {
-        delete locker.stack[index];
-        await Promise.delay(10000);
-        continue;
-      }
+    await Promise.mapSeries(bucket, async (blockNumber) => {
+      let block = await getBlock(blockNumber);
+      await addBlock(block, 0);
 
-      log.info(`bitcoin provider ${index} took chuck of blocks ${newChunkToLock[0]} - ${_.last(newChunkToLock)}`);
-      locker.stack[index] = newChunkToLock;
-      await Promise.mapSeries(newChunkToLock, async (blockNumber) => {
-        let block = await getBlock(blockNumber);
-        await new Promise.promisify(addBlock.bind(null, block, 0))();
-
-        _.pull(newChunkToLock, blockNumber);
-        this.events.emit('block', block);
-      }).catch((e) => {
-        if (e && e.code === 11000)
-          return _.pull(newChunkToLock, newChunkToLock[0]);
-        log.error(e);
-      });
-
-      if (!newChunkToLock.length)
-        _.pull(buckets, newChunkToLock);
-
-      delete locker.stack[index];
-
-    }
+      _.pull(bucket, blockNumber);
+      this.events.emit('block', block);
+    }).catch((e) => {
+      if (e && e.code === 11000)
+        return _.pull(bucket, bucket[0]);
+      log.error(e);
+    });
   }
 }
 
