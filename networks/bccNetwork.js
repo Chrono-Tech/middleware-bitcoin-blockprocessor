@@ -1,3 +1,9 @@
+/**
+ * Copyright 2017–2018, LaborX PTY
+ * Licensed under the AGPL Version 3 license.
+ * @author Egor Zuev <zyev.egor@gmail.com>
+ */
+
 const BN = require('bcoin/lib/crypto/bn'),
   Block = require('bcoin/lib/primitives/block'),
   util = require('bcoin/lib/utils/util');

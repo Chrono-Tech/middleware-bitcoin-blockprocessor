@@ -107,5 +107,8 @@ The actual network could be set with NETWORK param. All supported networks are p
 
 License
 ----
+ [GNU AGPLv3](LICENSE)
 
-MIT
+Copyright
+----
+LaborX PTY
