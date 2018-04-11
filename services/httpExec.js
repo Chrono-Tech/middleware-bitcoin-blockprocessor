@@ -1,10 +1,11 @@
 'use strict';
 
 const Promise = require('bluebird'),
+  config = require('../config'),  
   webSocket = require('ws');
 
 module.exports = async (method, params) => {
-  const client = new webSocket('ws://localhost:3000/ws');  
+  const client = new webSocket(`ws://localhost:${config.node.httpPort}/ws`);  
 
   let response = await new Promise((res, rej) => {
 
@@ -28,8 +29,7 @@ module.exports = async (method, params) => {
       rej(error.message);
     };
   });
-  
-  console.log('Response: ', response);
+
   client.close();
   return response;
 };
