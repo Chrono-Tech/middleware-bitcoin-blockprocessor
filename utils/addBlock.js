@@ -26,7 +26,7 @@ const config = require('../config'),
 
 const addBlock = async (block, type) => {
 
-  return await new Promise((res, rej)=>{
+  return await new Promise((res, rej) => {
 
     sem.take(async () => {
       try {
@@ -54,7 +54,6 @@ const addBlock = async (block, type) => {
       sem.leave();
     });
 
-
   });
 
 };
@@ -81,32 +80,19 @@ const updateDbStateWithBlockUP = async (block) => {
 
   log.info('updating utxos for block: ', block.number);
 
-  const chunks = _.chunk(toCreate, 50);
-
-  let processed = 0;
-  await Promise.mapSeries(chunks, async input => {
-    await utxoModel.remove({
-      $or: input.map(item => ({
-        hash: item.hash,
-        index: item.index
-      }))
-    });
-    await utxoModel.insertMany(input);
-    processed += input.length;
-    log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-  }
-  );
+  await utxoModel.insertMany(toCreate, {ordered: false}).catch(err => {
+    if (err && err.code !== 11000)
+      return Promise.reject(err);
+  });
   const mempool = await ipcExec('getrawmempool', []);
 
   await utxoModel.remove({$or: toRemove});
-  await txModel.remove({
-    $or: [
-      {hash: {$in: block.txs.map(tx => tx.hash)}},
-      {number: -1, hash: {$nin: mempool}}
-    ]
-  });
+  await txModel.remove({number: -1, hash: {$nin: mempool}});
 
-  await txModel.insertMany(block.txs);
+  await txModel.insertMany(block.txs, {ordered: false}).catch(err => {
+    if (err && err.code !== 11000)
+      return Promise.reject(err);
+  });
   await blockModel.update({number: block.number}, block, {upsert: true});
 
 };
@@ -135,17 +121,17 @@ const rollbackStateFromBlock = async (block) => {
 
   let processed = 0;
   await Promise.mapSeries(chunks, async input => {
-    await utxoModel.remove({
-      $or: input.map(item => ({
-        hash: item.hash,
-        index: item.index,
-        blockNumber: block.number
-      }))
-    });
-    await utxoModel.insertMany(input, {ordered: false});
-    processed += input.length;
-    log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-  }
+      await utxoModel.remove({
+        $or: input.map(item => ({
+          hash: item.hash,
+          index: item.index,
+          blockNumber: block.number
+        }))
+      });
+      await utxoModel.insertMany(input, {ordered: false});
+      processed += input.length;
+      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+    }
   );
 
   await utxoModel.remove({blockNumber: {$gte: block.number}});
@@ -162,19 +148,16 @@ const updateDbStateWithBlockDOWN = async (block) => {
 
   let utxo = await getUTXO(block);
 
-  if (utxo.length) {
-    await utxoModel.remove({
-      $or: utxo.map(item => ({
-        hash: item.hash,
-        index: item.index
-      }))
+  if (utxo.length)
+    await utxoModel.insertMany(utxo, {ordered: false}).catch(err => {
+      if (err && err.code !== 11000)
+        return Promise.reject(err);
     });
 
-    await utxoModel.insertMany(utxo);
-  }
-
-  await txModel.remove({hash: {$in: block.txs.map(tx => tx.hash)}});
-  await txModel.insertMany(block.txs);
+  await txModel.insertMany(block.txs, {ordered: false}).catch(err => {
+    if (err && err.code !== 11000)
+      return Promise.reject(err);
+  });
   await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
 
 };
