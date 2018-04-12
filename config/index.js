@@ -53,6 +53,7 @@ module.exports = {
     zmq: process.env.ZMQ || 'tcp://127.0.0.1:43332',
     network: process.env.NETWORK || 'regtest',
     ipcName: process.env.IPC_NAME || 'bitcoin',
-    ipcPath: process.env.IPC_PATH || '/tmp/'
+    ipcPath: process.env.IPC_PATH || '/tmp/',
+    httpPort: process.env.HTTP_PORT || 3000
   }
 };
