@@ -84,10 +84,14 @@ const updateDbStateWithBlockUP = async (block) => {
     if (err && err.code !== 11000)
       return Promise.reject(err);
   });
+
   const mempool = await ipcExec('getrawmempool', []);
 
   await utxoModel.remove({$or: toRemove});
-  await txModel.remove({number: -1, hash: {$nin: mempool}});
+
+  await Promise.mapSeries(_.chunk(mempool, 100), async mempoolChunk => {
+    await txModel.remove({blockNumber: -1, hash: {$nin: mempoolChunk}});
+  });
 
   await txModel.insertMany(block.txs, {ordered: false}).catch(err => {
     if (err && err.code !== 11000)
