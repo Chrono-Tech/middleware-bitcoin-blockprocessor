@@ -7,7 +7,7 @@ const config = require('../config'),
   getUTXO = require('../utils/getUTXO'),
   utxoModel = require('../models/utxoModel'),
   txModel = require('../models/txModel'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('../services/exec'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
 
 /**
@@ -84,7 +84,7 @@ const updateDbStateWithBlockUP = async (block) => {
     log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
   }
   );
-  const mempool = await ipcExec('getrawmempool', []);
+  const mempool = await exec('getrawmempool', []);
 
   await utxoModel.remove({$or: toRemove});
   await txModel.remove({

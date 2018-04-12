@@ -1,5 +1,5 @@
 const config = require('../config'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('../services/exec'),
   transformBlockTxs = require('./transformBlockTxs'),
   BlockModel = require('bcoin/lib/primitives/block');
 
@@ -9,8 +9,8 @@ module.exports = async (blockNumber) => {
    * Get raw block
    * @type {Object}
    */
-  let hash = await ipcExec('getblockhash', [blockNumber]);
-  let blockRaw = await ipcExec('getblock', [hash, false]);
+  let hash = await exec('getblockhash', [blockNumber]);
+  let blockRaw = await exec('getblock', [hash, false]);
   let block = BlockModel.fromRaw(blockRaw, 'hex');
 
   let txs = await transformBlockTxs(block.txs);

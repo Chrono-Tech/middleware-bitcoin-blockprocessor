@@ -1,10 +1,10 @@
 'use strict';
 
 const Promise = require('bluebird'),
-  config = require('../config'),  
+  config = require('../../config'),  
   webSocket = require('ws');
 
-let client;
+let client; 
 
 async function createConnection() {
   return new Promise((res, rej) => {
@@ -19,17 +19,17 @@ async function createConnection() {
 }
 
 async function executor(method, params) {
-  let response = await new Promise((res, rej) => {
-    client.send(JSON.stringify({method: method, params: params}));
+    let response = await new Promise((res, rej) => {
+      client.send(JSON.stringify({method: method, params: params}));
 
-    client.onmessage = async (data) => {
-      let result = JSON.parse(data.data); 
-      if(!result.error)
-        return res(result.result);
-    
-      await Promise.delay(500);
-      client.close();
-      rej(result.error.message);
+      client.onmessage = async (data) => {
+        let result = JSON.parse(data.data); 
+        if(!result.error)
+          return res(result.result);
+      
+        await Promise.delay(500);
+        client.close();
+        rej(result.error.message);
     };
   });
 
@@ -40,4 +40,4 @@ async function executor(method, params) {
 module.exports = {
   createConnection,
   executor
-};
+}

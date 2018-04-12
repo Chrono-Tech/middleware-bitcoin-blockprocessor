@@ -3,27 +3,28 @@ const Promise = require('bluebird'),
   _ = require('lodash'),
   ipc = require('node-ipc');
 
-module.exports = async (method, params) => {
+const ipcInstance = new ipc.IPC;
 
-  const ipcInstance = new ipc.IPC;
+Object.assign(ipcInstance.config, {
+  id: `${Date.now()}${_.random(Math.pow(2, 32))}`,
+  socketRoot: config.node.ipcPath,
+  retry: 1500,
+  sync: true,
+  silent: true,
+  unlink: true,
+  maxRetries: 3
+});
 
-  Object.assign(ipcInstance.config, {
-    id: `${Date.now()}${_.random(Math.pow(2, 32))}`,
-    socketRoot: config.node.ipcPath,
-    retry: 1500,
-    sync: true,
-    silent: true,
-    unlink: true,
-    maxRetries: 3
-  });
-
-  await new Promise((res, rej) => {
+async function createConnection() {
+  return await new Promise((res, rej) => {
     ipcInstance.connectTo(config.node.ipcName, () => {
-      ipcInstance.of[config.node.ipcName].on('connect', res);
-      ipcInstance.of[config.node.ipcName].on('error', rej);
+      ipcInstance.of[config.node.ipcName].on('connect', () => res(this));
+      ipcInstance.of[config.node.ipcName].on('error', ()=>rej(new Error('CONNECTION ERROR')));
     });
   });
+}
 
+async function executor(method, params) {
   let response = await new Promise((res, rej) => {
     ipcInstance.of[config.node.ipcName].on('message', async data => {
       if (!data.error)
@@ -45,4 +46,9 @@ module.exports = async (method, params) => {
   ipcInstance.disconnect(config.node.ipcName);
 
   return response;
+}
+
+module.exports = {
+  createConnection,
+  executor
 };
