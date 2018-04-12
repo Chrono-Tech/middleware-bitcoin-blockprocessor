@@ -16,7 +16,7 @@ async function createConnection() {
   return await new Promise((res, rej) => {
       ipc.connectTo(config.node.ipcName, () => {
       ipc.of[config.node.ipcName].on('connect', () => res(this));
-      ipc.of[config.node.ipcName].on('disconnect', ()=>rej(new Error('CONNECTION ERROR')));
+      ipc.of[config.node.ipcName].on('disconnect', () => rej(new Error('CONNECTION ERROR')));
     });
   })
 }
@@ -29,11 +29,15 @@ async function executor(method, params) {
   })
 
   ipc.disconnect(config.node.ipcName);
-
   return response;
+}
+
+function closeConnection() {
+  ipc.disconnect(config.node.ipcName);
 }
 
 module.exports = {
   createConnection,
-  executor
+  executor,
+  closeConnection
 }

@@ -37,7 +37,12 @@ async function executor(method, params) {
   return response;
 }
 
+function closeConnection() {
+  client.close();
+}
+
 module.exports = {
   createConnection,
-  executor
+  executor,
+  closeConnection
 }

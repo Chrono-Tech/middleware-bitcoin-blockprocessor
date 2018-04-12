@@ -48,7 +48,12 @@ async function executor(method, params) {
   return response;
 }
 
+function closeConnection() {
+  ipcInstance.disconnect(config.node.ipcName);
+}
+
 module.exports = {
   createConnection,
-  executor
+  executor,
+  closeConnection
 };

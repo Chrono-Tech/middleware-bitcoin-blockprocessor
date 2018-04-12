@@ -14,10 +14,10 @@ module.exports = async (method, params) => {
              return new Error('No connections!');
 
          if(ipc instanceof Error){
-             console.log('Im here');
              return http.executor(method, params);
          }
         
+        http.closeConnection(); 
         return ipc.executor(method, params);
     }).then((res) => {
         return res;

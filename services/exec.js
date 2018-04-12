@@ -16,7 +16,8 @@ module.exports = async (method, params) => {
     if(ipc instanceof Error){
       return http.executor(method, params);
     }
-        
+    
+    http.closeConnection();
     return ipc.executor(method, params);
   }).then((res) => {
     return res;
