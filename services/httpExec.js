@@ -1,35 +1,21 @@
 'use strict';
 
-const Promise = require('bluebird'),
-  webSocket = require('ws');
+const jayson = require('jayson'),
+  config = require('../config'),
+  Promise = require('bluebird');
 
 module.exports = async (method, params) => {
-  const client = new webSocket('ws://localhost:3000/ws');  
+  let client = jayson.client.http({
+    port: config.http.httpPort,
+    auth: config.http.auth
+  });
 
   let response = await new Promise((res, rej) => {
-
-    client.onmessage = async (data) => {
-      let result = JSON.parse(data.data); 
-      if(!result.error)
-        return res(result.result);
-      
-      await Promise.delay(500);
-      client.close();
-      rej(result.error.message);
-    };
-
-    client.onopen = () => {
-      client.send(JSON.stringify({method: method, params: params}));
-    };
-
-    client.onerror = async (error) => {
-      client.close();
-      await Promise.delay(500);
-      rej(error.message);
-    };
-  });
-  
-  console.log('Response: ', response);
-  client.close();
+    client.request(method, params, (err, data) => {
+      if(err)
+        return rej(err);
+      return res(data);
+    });
+  }).catch((err) => err);
   return response;
 };

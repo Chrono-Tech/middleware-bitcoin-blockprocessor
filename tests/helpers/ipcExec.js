@@ -6,7 +6,6 @@ module.exports = async (method, params) => {
 
   Object.assign(ipc.config, {
     id: Date.now(),
-    socketRoot: config.node.ipcPath,
     retry: 1500,
     sync: true,
     silent: true,

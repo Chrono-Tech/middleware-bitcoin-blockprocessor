@@ -9,7 +9,6 @@ module.exports = async (method, params) => {
 
   Object.assign(ipcInstance.config, {
     id: `${Date.now()}${_.random(Math.pow(2, 32))}`,
-    socketRoot: config.node.ipcPath,
     retry: 1500,
     sync: true,
     silent: true,
