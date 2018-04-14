@@ -49,7 +49,8 @@ module.exports = {
     ipcName: process.env.IPC_NAME || 'bitcoin'
   },
   http: {
-    httpPort: process.env.HTTP_PORT || '8332',
-    auth: process.env.AUTH
+    uri: process.env.URI || 'http://localhost:8332',
+    user: process.env.USER_NAME || '',
+    password: process.env.PASSWORD || ''
   }
 };

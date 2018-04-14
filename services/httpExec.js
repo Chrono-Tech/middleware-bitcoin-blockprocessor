@@ -1,21 +1,48 @@
 'use strict';
 
-const jayson = require('jayson'),
+const Promise = require('bluebird'),
+  request = require('request'),
   config = require('../config'),
-  Promise = require('bluebird');
+  bunyan = require('bunyan'),
+  log = bunyan.createLogger({name: 'app.services.httpExec'});
 
 module.exports = async (method, params) => {
-  let client = jayson.client.http({
-    port: config.http.httpPort,
-    auth: config.http.auth
-  });
+  if(typeof(method) !== 'string') {
+    throw new TypeError(method + ' must be a string');
+  }
 
-  let response = await new Promise((res, rej) => {
-    client.request(method, params, (err, data) => {
+  if(typeof(params) !== 'object' && !Array.isArray(params)) {
+    throw new TypeError(params + ' must be an object or array');
+  }
+
+  let result = await new Promise((res, rej) => {
+    request({
+      uri:`${config.http.uri}`,
+      method:'POST',
+      auth: {
+        user: `${config.http.user}`,
+        pass: `${config.http.password}`
+      },
+      headers: {
+        'content_type': 'text/plain'
+      },
+      json: {
+        'method': method,
+        'params': params
+      }
+    }, (err, response, body) => {
       if(err)
         return rej(err);
-      return res(data);
-    });
-  }).catch((err) => err);
-  return response;
+      
+      if(body.error)
+        return rej(body.error);
+    
+      return res(body.result);
+    });  
+  }).catch((err) => {
+    log.error(err);
+    return [];
+  });
+
+  return result;
 };
