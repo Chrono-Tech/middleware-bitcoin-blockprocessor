@@ -38,16 +38,15 @@ module.exports = async (txs) => {
 
   txsWithInputs = _.flattenDeep(txsWithInputs);
 
-
   let missedInputs = _.chain(txs)
     .map(tx => tx.inputs)
     .flattenDeep()
     .map(input => input.prevout.hash)
     .uniq()
-    .reject(hash=> _.find(txsWithInputs, input=>input.hash === hash) || hash === '0000000000000000000000000000000000000000000000000000000000000000')
+    .reject(hash => _.find(txsWithInputs, input => input.hash === hash) || hash === '0000000000000000000000000000000000000000000000000000000000000000')
     .value();
 
-  missedInputs = await Promise.map(missedInputs, async missedInputHash=>{
+  missedInputs = await Promise.map(missedInputs, async missedInputHash => {
     let rawtx = await ipcExec('getrawtransaction', [missedInputHash]);
     return TX.fromRaw(rawtx, 'hex').toJSON();
   });
@@ -69,22 +68,21 @@ module.exports = async (txs) => {
       return input;
     });
 
-
     const inputAmount = _.chain(tx.inputs)
-      .map(input=>input.value)
+      .map(input => input.value)
       .sum()
       .defaults(0)
       .value();
 
     const outputAmount = _.chain(tx.outputs)
-      .map(output=>output.value)
+      .map(output => output.value)
       .sum()
       .value();
 
     return {
       value: tx.value,
       hash: tx.hash,
-      fee: inputAmount ? inputAmount - outputAmount : 0,
+      fee: inputAmount <= 0 ? 0 : inputAmount - outputAmount,
       inputs: tx.inputs,
       outputs: tx.outputs
     };
