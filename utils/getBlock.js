@@ -7,6 +7,8 @@
 const config = require('../config'),
   ipcExec = require('../services/ipcExec'),
   transformBlockTxs = require('./transformBlockTxs'),
+  Network = require('bcoin/lib/protocol/network'),
+  network = Network.get(config.node.network),
   BlockModel = require('bcoin/lib/primitives/block');
 
 module.exports = async (blockNumber) => {
@@ -17,7 +19,8 @@ module.exports = async (blockNumber) => {
    */
   let hash = await ipcExec('getblockhash', [blockNumber]);
   let blockRaw = await ipcExec('getblock', [hash, false]);
-  let block = BlockModel.fromRaw(blockRaw, 'hex');
+  let block = BlockModel.fromRaw(blockRaw, 'hex').getJSON(network);
+
 
   let txs = await transformBlockTxs(block.txs);
   txs = txs.map(tx => {
@@ -29,8 +32,10 @@ module.exports = async (blockNumber) => {
   return {
     network: config.node.network,
     number: blockNumber,
-    hash: block.rhash(),
+    hash: block.hash,
     txs: txs,
-    timestamp: block.time || Date.now(),
+    timestamp: block.time,
+    bits: block.bits,
+    merkleRoot: block.merkleRoot
   };
 };

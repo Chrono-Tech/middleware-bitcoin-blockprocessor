@@ -8,10 +8,8 @@ const config = require('../config'),
   txModel = require('../models/txModel'),
   Promise = require('bluebird'),
   ipcExec = require('../services/ipcExec'),
-  Network = require('bcoin/lib/protocol/network'),
   TX = require('bcoin/lib/primitives/tx'),
-  _ = require('lodash'),
-  network = Network.get(config.node.network);
+  _ = require('lodash');
 
 /**
  * @service
@@ -22,8 +20,6 @@ const config = require('../config'),
 
 
 module.exports = async (txs) => {
-
-  txs = txs.map(tx => tx.getJSON(network));
 
   const inputHashesChunks = _.chain(txs)
     .map(tx => tx.inputs)
@@ -73,11 +69,22 @@ module.exports = async (txs) => {
       return input;
     });
 
+
+    const inputAmount = _.chain(tx.inputs)
+      .map(input=>input.value)
+      .sum()
+      .defaults(0)
+      .value();
+
+    const outputAmount = _.chain(tx.outputs)
+      .map(output=>output.value)
+      .sum()
+      .value();
+
     return {
       value: tx.value,
       hash: tx.hash,
-      fee: tx.fee,
-      minFee: tx.minFee,
+      fee: inputAmount ? inputAmount - outputAmount : 0,
       inputs: tx.inputs,
       outputs: tx.outputs
     };
