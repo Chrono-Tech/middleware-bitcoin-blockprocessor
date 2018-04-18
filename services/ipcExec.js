@@ -6,15 +6,16 @@
 
 const Promise = require('bluebird'),
   config = require('../config'),
-  _ = require('lodash'),
+  uniqid = require('uniqid'),
+  sem = require('semaphore')(10),
   ipc = require('node-ipc');
 
-module.exports = async (method, params) => {
+const makeRequest = async (method, params) => {
 
   const ipcInstance = new ipc.IPC;
 
   Object.assign(ipcInstance.config, {
-    id: `${Date.now()}${_.random(Math.pow(2, 32))}`,
+    id: uniqid(),
     socketRoot: config.node.ipcPath,
     retry: 1500,
     sync: true,
@@ -51,4 +52,20 @@ module.exports = async (method, params) => {
   ipcInstance.disconnect(config.node.ipcName);
 
   return response;
+};
+
+module.exports = async (method, params) => {
+
+  return new Promise((res, rej) => {
+    sem.take(async () => {
+      try {
+        let response = await makeRequest(method, params);
+        res(response);
+      } catch (err) {
+        rej(err);
+      }
+      sem.leave();
+    });
+  })
+
 };
