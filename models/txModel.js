@@ -28,6 +28,7 @@ const TX = new mongoose.Schema({
     value: {type: Number},
     address: {type: String, index: true}
   }],
+  fee: {type: Number},
   timestamp: {type: Number, required: true, index: true, default: Date.now},
   network: {type: String}
 });

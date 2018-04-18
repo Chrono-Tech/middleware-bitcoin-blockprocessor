@@ -13,6 +13,8 @@ const config = require('../config'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   EventEmitter = require('events'),
+  Network = require('bcoin/lib/protocol/network'),
+  network = Network.get(config.node.network),
   ipcExec = require('../services/ipcExec'),
   getBlock = require('../utils/getBlock'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'}),
@@ -99,7 +101,7 @@ class blockWatchingService {
 
   async UnconfirmedTxEvent (tx) {
 
-    tx = TX.fromRaw(tx, 'hex');
+    tx = TX.fromRaw(tx, 'hex').getJSON();
 
     const fullTx = (await transformBlockTxs([tx]))[0];
     await txModel.findOneAndUpdate({blockNumber: -1, hash: fullTx.hash}, fullTx, {upsert: true, setDefaultsOnInsert: true});
