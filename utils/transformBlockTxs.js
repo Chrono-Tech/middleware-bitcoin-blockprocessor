@@ -7,7 +7,9 @@
 const config = require('../config'),
   txModel = require('../models/txModel'),
   Promise = require('bluebird'),
+  ipcExec = require('../services/ipcExec'),
   Network = require('bcoin/lib/protocol/network'),
+  TX = require('bcoin/lib/primitives/tx'),
   _ = require('lodash'),
   network = Network.get(config.node.network);
 
@@ -40,7 +42,21 @@ module.exports = async (txs) => {
 
   txsWithInputs = _.flattenDeep(txsWithInputs);
 
-  return txs.map(tx => {
+
+  let missedInputs = _.chain(txs)
+    .map(tx => tx.inputs)
+    .flattenDeep()
+    .map(input => input.prevout.hash)
+    .uniq()
+    .reject(hash=> _.find(txsWithInputs, input=>input.hash === hash) || hash === '0000000000000000000000000000000000000000000000000000000000000000')
+    .value();
+
+  missedInputs = await Promise.map(missedInputs, async missedInputHash=>{
+    let rawtx = await ipcExec('getrawtransaction', [missedInputHash]);
+    return TX.fromRaw(rawtx, 'hex').toJSON();
+  });
+
+  txs = txs.map(tx => {
     tx.outputs = tx.outputs.map(output => {
       return {
         address: output.address,
@@ -50,10 +66,10 @@ module.exports = async (txs) => {
 
     tx.inputs = tx.inputs.map(input => {
       input.value = _.chain(txsWithInputs)
+        .union(missedInputs)
         .find({hash: input.prevout.hash})
         .get(`outputs.${input.prevout.index}.value`, 0)
         .value();
-
       return input;
     });
 
@@ -67,4 +83,7 @@ module.exports = async (txs) => {
     };
 
   });
+
+  return txs;
+
 };
