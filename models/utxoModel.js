@@ -23,6 +23,4 @@ const UTXO = new mongoose.Schema({
   created: {type: Date, required: true, default: Date.now}
 });
 
-UTXO.index({blockNumber: 1, hash: 1, index: 1}, {unique: true});
-
 module.exports = mongoose.model(`${config.mongo.data.collectionPrefix}UTXO`, UTXO);
