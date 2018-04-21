@@ -13,7 +13,7 @@ const config = require('../config'),
   getUTXO = require('../utils/getUTXO'),
   utxoModel = require('../models/utxoModel'),
   txModel = require('../models/txModel'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('../services/exec'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
 
 /**
@@ -85,7 +85,7 @@ const updateDbStateWithBlockUP = async (block) => {
       return Promise.reject(err);
   });
 
-  const mempool = await ipcExec('getrawmempool', []);
+  const mempool = await exec('getrawmempool', []);
 
   await utxoModel.remove({$or: toRemove});
 
@@ -125,17 +125,17 @@ const rollbackStateFromBlock = async (block) => {
 
   let processed = 0;
   await Promise.mapSeries(chunks, async input => {
-      await utxoModel.remove({
-        $or: input.map(item => ({
-          hash: item.hash,
-          index: item.index,
-          blockNumber: block.number
-        }))
-      });
-      await utxoModel.insertMany(input, {ordered: false});
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-    }
+    await utxoModel.remove({
+      $or: input.map(item => ({
+        hash: item.hash,
+        index: item.index,
+        blockNumber: block.number
+      }))
+    });
+    await utxoModel.insertMany(input, {ordered: false});
+    processed += input.length;
+    log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
+  }
   );
 
   await utxoModel.remove({blockNumber: {$gte: block.number}});

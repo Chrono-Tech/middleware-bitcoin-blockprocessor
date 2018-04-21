@@ -8,7 +8,7 @@ const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('../services/exec'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
   blockModel = require('../models/blockModel'),
   utxoModel = require('../models/utxoModel'),
@@ -71,7 +71,7 @@ class SyncCacheService {
 
   async runPeer (bucket) {
 
-    let lastBlock = await ipcExec('getblockhash', [_.last(bucket)]).catch(() => null);
+    let lastBlock = await exec('getblockhash', [_.last(bucket)]).catch(() => null);
 
     if (!lastBlock)
       return await Promise.delay(10000);
