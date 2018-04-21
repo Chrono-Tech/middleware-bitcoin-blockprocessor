@@ -12,7 +12,6 @@ module.exports = async (method, params) => {
 
   Object.assign(ipc.config, {
     id: Date.now(),
-    socketRoot: config.node.ipcPath,
     retry: 1500,
     sync: true,
     silent: true,
@@ -21,19 +20,19 @@ module.exports = async (method, params) => {
   });
 
   await new Promise((res, rej) => {
-    ipc.connectTo(config.node.ipcName, () => {
-      ipc.of[config.node.ipcName].on('connect', res);
-      ipc.of[config.node.ipcName].on('disconnect', ()=>rej(new Error('CONNECTION ERROR')));
+    ipc.connectTo(config.node.connectionName, () => {
+      ipc.of[config.node.connectionName].on('connect', res);
+      ipc.of[config.node.connectionName].on('disconnect', ()=>rej(new Error('CONNECTION ERROR')));
     });
   });
 
   let response = await new Promise((res, rej) => {
-    ipc.of[config.node.ipcName].on('message', data => data.error ? rej(data.error) : res(data.result));
-    ipc.of[config.node.ipcName].emit('message', JSON.stringify({method: method, params: params})
+    ipc.of[config.node.connectionName].on('message', data => data.error ? rej(data.error) : res(data.result));
+    ipc.of[config.node.connectionName].emit('message', JSON.stringify({method: method, params: params})
     );
   });
 
-  ipc.disconnect(config.node.ipcName);
+  ipc.disconnect(config.node.connectionName);
 
   return response;
 };
