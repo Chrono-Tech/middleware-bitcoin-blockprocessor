@@ -11,7 +11,7 @@ const config = require('../config'),
   sem = require('semaphore')(1),
   blockModel = require('../models/blockModel'),
   getUTXO = require('../utils/getUTXO'),
-  utxoModel = require('../models/utxoModel'),
+  //utxoModel = require('../models/utxoModel'),
   txModel = require('../models/txModel'),
   ipcExec = require('../services/ipcExec'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
@@ -60,34 +60,27 @@ const addBlock = async (block, type) => {
 
 const updateDbStateWithBlockUP = async (block) => {
 
-  const toRemove = _.chain(block.txs)
+  const inputs = _.chain(block.txs)
     .map(tx => tx.inputs)
     .flattenDeep()
     .map(input => input.prevout)
     .value();
 
-  const toCreate = _.chain(block.txs)
-    .map(tx =>
-      tx.outputs.map((output, index) =>
-        _.merge(output, {hash: tx.hash, index: index, blockNumber: block.number})
-      )
-    )
-    .flattenDeep()
-    .reject(output =>
-      _.find(toRemove, {hash: output.hash, index: output.index})
-    )
-    .value();
+  block.txs = block.txs.map(tx => {
+    tx.outputs = tx.outputs.map((output, index) => {
+      output.spent = !!_.find(inputs, {hash: tx.hash, index: index});
+      return output;
+    });
+    return tx;
+  });
 
   log.info('updating utxos for block: ', block.number);
 
-  await utxoModel.insertMany(toCreate, {ordered: false}).catch(err => {
-    if (err && err.code !== 11000)
-      return Promise.reject(err);
+  await Promise.map(inputs, async input => {
+    await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: true}});
   });
 
   const mempool = await ipcExec('getrawmempool', []);
-
-  await utxoModel.remove({$or: toRemove});
 
   await Promise.mapSeries(_.chunk(mempool, 100), async mempoolChunk => {
     await txModel.remove({blockNumber: -1, hash: {$nin: mempoolChunk}});
@@ -97,6 +90,9 @@ const updateDbStateWithBlockUP = async (block) => {
     if (err && err.code !== 11000)
       return Promise.reject(err);
   });
+
+  block.txs = block.txs.map(tx=>tx.hash);
+
   await blockModel.update({number: block.number}, block, {upsert: true});
 
 };
@@ -110,35 +106,20 @@ const rollbackStateFromBlock = async (block) => {
     ]
   });
 
-  const toCreate = _.chain(blocksToDelete)
+  const inputs = _.chain(blocksToDelete)
     .map(block => block.toObject().txs)
     .flattenDeep()
     .map(tx => tx.inputs)
     .flattenDeep()
-    .map(input => _.merge(input.prevout, {address: input.address, value: input.value, blockNumber: block.number}))
     .uniqWith(_.isEqual)
     .value();
 
   log.info('rollback utxos from block: ', block.number);
 
-  const chunks = _.chunk(toCreate, 50);
+  await Promise.map(inputs, async input => {
+    await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: false}});
+  });
 
-  let processed = 0;
-  await Promise.mapSeries(chunks, async input => {
-      await utxoModel.remove({
-        $or: input.map(item => ({
-          hash: item.hash,
-          index: item.index,
-          blockNumber: block.number
-        }))
-      });
-      await utxoModel.insertMany(input, {ordered: false});
-      processed += input.length;
-      log.info(`processed utxo: ${parseInt(processed / toCreate.length * 100)}%`);
-    }
-  );
-
-  await utxoModel.remove({blockNumber: {$gte: block.number}});
   await txModel.remove({blockNumber: {$gte: block.number}});
   await blockModel.remove({
     $or: [
@@ -150,18 +131,16 @@ const rollbackStateFromBlock = async (block) => {
 
 const updateDbStateWithBlockDOWN = async (block) => {
 
-  let utxo = await getUTXO(block);
-
-  if (utxo.length)
-    await utxoModel.insertMany(utxo, {ordered: false}).catch(err => {
-      if (err && err.code !== 11000)
-        return Promise.reject(err);
-    });
+  block.txs = await getUTXO(block);
+//  console.log(block.txs)
 
   await txModel.insertMany(block.txs, {ordered: false}).catch(err => {
     if (err && err.code !== 11000)
       return Promise.reject(err);
   });
+
+  block.txs = block.txs.map(tx => tx.hash);
+
   await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
 
 };

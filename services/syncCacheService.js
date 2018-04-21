@@ -11,7 +11,6 @@ const bunyan = require('bunyan'),
   ipcExec = require('../services/ipcExec'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
   blockModel = require('../models/blockModel'),
-  utxoModel = require('../models/utxoModel'),
   txModel = require('../models/txModel'),
   getBlock = require('../utils/getBlock'),
   addBlock = require('../utils/addBlock'),
@@ -40,7 +39,6 @@ class SyncCacheService {
   async indexCollection () {
     log.info('indexing...');
     await blockModel.init();
-    await utxoModel.init();
     await txModel.init();
     log.info('indexation completed!');
   }

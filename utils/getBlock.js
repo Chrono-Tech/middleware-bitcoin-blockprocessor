@@ -30,7 +30,6 @@ module.exports = async (blockNumber) => {
   });
 
   return {
-    network: config.node.network,
     number: blockNumber,
     hash: block.hash,
     txs: txs,

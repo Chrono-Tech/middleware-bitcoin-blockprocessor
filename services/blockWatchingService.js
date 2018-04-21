@@ -120,7 +120,7 @@ class blockWatchingService {
       return Promise.reject({code: 0});
     }
 
-    const lastBlocks = await Promise.mapSeries(this.lastBlocks, async blockHash => await ipcExec('getblock', [blockHash, true]));
+    const lastBlocks = await Promise.map(this.lastBlocks, async blockHash => await ipcExec('getblock', [blockHash, true]));
     const lastBlockHashes = _.chain(lastBlocks).map(block => _.get(block, 'hash')).compact().value();
 
     let savedBlocks = await blockModel.find({hash: {$in: lastBlockHashes}}, {number: 1}).limit(this.lastBlocks.length);
