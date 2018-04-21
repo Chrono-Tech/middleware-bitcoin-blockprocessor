@@ -52,7 +52,8 @@ module.exports = {
   node: {
     zmq: process.env.ZMQ || 'tcp://127.0.0.1:43332',
     network: process.env.NETWORK || 'regtest',
-    ipcName: process.env.IPC_NAME || 'bitcoin',
-    ipcPath: process.env.IPC_PATH || '/tmp/'
+    connectionName: process.env.CONNECTION_NAME || 'bitcoin',
+    user: process.env.USER_NAME,
+    password: process.env.PASSWORD
   }
 };

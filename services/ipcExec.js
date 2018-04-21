@@ -5,18 +5,16 @@
  */
 
 const Promise = require('bluebird'),
-  config = require('../config'),
   uniqid = require('uniqid'),
   sem = require('semaphore')(10),
   ipc = require('node-ipc');
 
-const makeRequest = async (method, params) => {
+const makeRequest = async (method, params, name) => {
 
   const ipcInstance = new ipc.IPC;
 
   Object.assign(ipcInstance.config, {
     id: uniqid(),
-    socketRoot: config.node.ipcPath,
     retry: 1500,
     sync: true,
     silent: true,
@@ -25,31 +23,31 @@ const makeRequest = async (method, params) => {
   });
 
   await new Promise((res, rej) => {
-    ipcInstance.connectTo(config.node.ipcName, () => {
-      ipcInstance.of[config.node.ipcName].on('connect', res);
-      ipcInstance.of[config.node.ipcName].on('error', rej);
+    ipcInstance.connectTo(name, () => {
+      ipcInstance.of[name].on('connect', res);
+      ipcInstance.of[name].on('error', rej);
     });
   });
 
   let response = await new Promise((res, rej) => {
-    ipcInstance.of[config.node.ipcName].on('message', async data => {
+    ipcInstance.of[name].on('message', async data => {
       if (!data.error)
         return res(data.result);
 
-      ipcInstance.disconnect(config.node.ipcName);
+      ipcInstance.disconnect(name);
       await Promise.delay(500);
       rej(data.error);
 
     });
-    ipcInstance.of[config.node.ipcName].emit('message', JSON.stringify({method: method, params: params}));
-    ipcInstance.of[config.node.ipcName].on('error', async err => {
-      ipcInstance.disconnect(config.node.ipcName);
+    ipcInstance.of[name].emit('message', JSON.stringify({method: method, params: params}));
+    ipcInstance.of[name].on('error', async err => {
+      ipcInstance.disconnect(name);
       await Promise.delay(500);
       rej(err);
     });
   });
 
-  ipcInstance.disconnect(config.node.ipcName);
+  ipcInstance.disconnect(name);
 
   return response;
 };
@@ -66,6 +64,6 @@ module.exports = async (method, params) => {
       }
       sem.leave();
     });
-  })
+  });
 
 };
