@@ -6,22 +6,25 @@ const Promise = require('bluebird'),
   bunyan = require('bunyan'),
   log = bunyan.createLogger({name: 'app.services.httpExec'});
 
-module.exports = async (method, params) => {
+module.exports = async (method, params, uri) => {
   if(typeof(method) !== 'string') {
-    throw new TypeError(method + ' must be a string');
+    throw new TypeError(method + ' must be a string.');
   }
 
   if(typeof(params) !== 'object' && !Array.isArray(params)) {
-    throw new TypeError(params + ' must be an object or array');
+    throw new TypeError(params + ' must be an object or array.');
   }
+
+  if(!(config.node.user && config.node.password))
+    throw new Error('You are not authorized.');
 
   let result = await new Promise((res, rej) => {
     request({
-      uri:`${config.http.uri}`,
-      method:'POST',
+      uri: uri,
+      method: 'POST',
       auth: {
-        user: `${config.http.user}`,
-        pass: `${config.http.password}`
+        user: `${config.node.user}`,
+        pass: `${config.node.password}`
       },
       headers: {
         'content_type': 'text/plain'
@@ -32,16 +35,10 @@ module.exports = async (method, params) => {
       }
     }, (err, response, body) => {
       if(err)
-        return rej(err);
-      
-      if(body.error)
-        return rej(body.error);
-    
-      return res(body.result);
-    });  
-  }).catch((err) => {
-    log.error(err);
-    return [];
+        rej(err);
+
+      res(body.result);
+    });
   });
 
   return result;

@@ -2,7 +2,7 @@ const _ = require('lodash'),
   config = require('../config'),
   bunyan = require('bunyan'),
   Promise = require('bluebird'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('../services/exec'),
   log = bunyan.createLogger({name: 'app.utils.allocateBlockBuckets'}),
   blockModel = require('../models/blockModel');
 
@@ -38,7 +38,8 @@ module.exports = async function () {
           missedBlocks.push(blockNumber);
       }
 
-  let currentNodeHeight = await Promise.resolve(ipcExec('getblockcount', [])).timeout(10000).catch(() => -1);
+  let currentNodeHeight = await Promise.resolve(exec('getblockcount', [])).timeout(10000).catch(() => -1);
+
 
   for (let i = currentCacheHeight + 1; i < currentNodeHeight - config.consensus.lastBlocksValidateAmount; i++)
     missedBlocks.push(i);

@@ -7,7 +7,7 @@ const config = require('../config'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   EventEmitter = require('events'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('./exec'),
   getBlock = require('../utils/getBlock'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'}),
   transformBlockTxs = require('../utils/transformBlockTxs');
@@ -38,7 +38,7 @@ class blockWatchingService {
 
     this.isSyncing = true;
 
-    const mempool = await ipcExec('getrawmempool', []);
+    const mempool = await exec('getrawmempool', []);
     if (!mempool.length)
       await txModel.remove({blockNumber: -1});
 
@@ -107,12 +107,12 @@ class blockWatchingService {
 
   async processBlock () {
 
-    let hash = await ipcExec('getblockhash', [this.currentHeight]);
+    let hash = await exec('getblockhash', [this.currentHeight]);
     if (!hash) {
       return Promise.reject({code: 0});
     }
 
-    const lastBlocks = await Promise.mapSeries(this.lastBlocks, async blockHash => await ipcExec('getblock', [blockHash, true]));
+    const lastBlocks = await Promise.mapSeries(this.lastBlocks, async blockHash => await exec('getblock', [blockHash, true]));
     const lastBlockHashes = _.chain(lastBlocks).map(block => _.get(block, 'hash')).compact().value();
 
     let savedBlocks = await blockModel.find({hash: {$in: lastBlockHashes}}, {number: 1}).limit(this.lastBlocks.length);

@@ -2,7 +2,7 @@ const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('./exec'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
   blockModel = require('../models/blockModel'),
   utxoModel = require('../models/utxoModel'),
@@ -70,7 +70,7 @@ class SyncCacheService {
         _.find(lockerChunks, lock => lock[0] === item[0])
       ).head().value();
 
-      let lastBlock = await ipcExec('getblockhash', [_.last(newChunkToLock)]).catch(() => null);
+      let lastBlock = await exec('getblockhash', [_.last(newChunkToLock)]).catch(() => null);
       locker.lock = false;
 
       if (!newChunkToLock || !lastBlock) {
