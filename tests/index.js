@@ -73,7 +73,7 @@ describe('core/blockProcessor', function () {
   });
 
   it('validate utxo and transactions', async () => {
-    await Promise.delay(5000);
+    await Promise.delay(20000);
     const keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
     const address = keyring.getAddress().toString();
     const coins = await ipcExec('getcoinsbyaddress', [address]);
