@@ -17,7 +17,7 @@ Object.assign(ipcInstance.config, {
   id: uniqid(),
   socketRoot: config.node.ipcPath,
   retry: 1500,
-  sync: true,
+  sync: false,
   silent: true,
   unlink: true
 });
