@@ -33,7 +33,7 @@ const TX = new mongoose.Schema({
   timestamp: {type: Number, required: true, index: true, default: Date.now}
 });
 
-TX.index({'inputs.prevout.hash': 1, 'inputs.prevout.index': 1}, {unique: true});
+TX.index({'inputs.prevout.hash': 1, 'inputs.prevout.index': 1});
 TX.index({'outputs.address': 1, 'outputs.spent': 1});
 
 

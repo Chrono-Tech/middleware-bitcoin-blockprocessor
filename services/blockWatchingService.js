@@ -104,7 +104,10 @@ class blockWatchingService {
     tx = TX.fromRaw(tx, 'hex').getJSON();
 
     const fullTx = (await transformBlockTxs([tx]))[0];
-    await txModel.findOneAndUpdate({blockNumber: -1, hash: fullTx.hash}, fullTx, {upsert: true, setDefaultsOnInsert: true});
+    await txModel.findOneAndUpdate({blockNumber: -1, hash: fullTx.hash}, fullTx, {
+      upsert: true,
+      setDefaultsOnInsert: true
+    });
     this.events.emit('tx', fullTx);
   }
 
@@ -115,7 +118,10 @@ class blockWatchingService {
 
   async processBlock () {
 
-    let hash = await ipcExec('getblockhash', [this.currentHeight]);
+    let hash = await ipcExec('getblockhash', [this.currentHeight]).catch(err =>
+      err.code && err.code === -32600 ? null : Promise.reject(err)
+    );
+
     if (!hash) {
       return Promise.reject({code: 0});
     }
