@@ -14,7 +14,7 @@ const _ = require('lodash'),
 
 module.exports = async function () {
 
-  const currentBlock = await blockModel.findOne({network: config.node.network}, {number: 1}, {sort: {number: -1}});
+  const currentBlock = await blockModel.findOne({}, {number: 1}, {sort: {number: -1}});
   const currentCacheHeight = _.get(currentBlock, 'number', -1);
 
   let blockNumbers = [];
@@ -27,7 +27,7 @@ module.exports = async function () {
 
   for (let blockNumberChunk of blockNumberChunks) {
     log.info(`validating blocks from: ${_.head(blockNumberChunk)} to ${_.last(blockNumberChunk)}`);
-    const count = await blockModel.count({network: config.node.network, number: {$in: blockNumberChunk}});
+    const count = await blockModel.count({number: {$in: blockNumberChunk}});
     if (count !== blockNumberChunk.length && count)
       missedBuckets.push(blockNumberChunk);
     if (!count)
@@ -39,7 +39,7 @@ module.exports = async function () {
     if (missedBucket.length)
       for (let blockNumber of missedBucket) {
         log.info(`validating block: ${blockNumber}`);
-        const isExist = await blockModel.count({network: config.node.network, number: blockNumber});
+        const isExist = await blockModel.count({number: blockNumber});
         if (!isExist)
           missedBlocks.push(blockNumber);
       }

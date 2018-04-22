@@ -18,8 +18,8 @@ const Block = new mongoose.Schema({
   hash: {type: String, unique: true, index: true},
   timestamp: {type: Number, required: true, index: true},
   bits: {type: Number, required: true},
+  txs: [{type: String}],
   merkleRoot: {type: String, required: true},
-  network: {type: String, index: true},
   created: {type: Date, required: true, default: Date.now}
 });
 
