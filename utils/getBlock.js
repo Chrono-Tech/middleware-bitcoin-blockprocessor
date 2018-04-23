@@ -5,7 +5,7 @@
  */
 
 const config = require('../config'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('../services/execService'),
   transformBlockTxs = require('./transformBlockTxs'),
   Network = require('bcoin/lib/protocol/network'),
   network = Network.get(config.node.network),
@@ -17,8 +17,8 @@ module.exports = async (blockNumber) => {
    * Get raw block
    * @type {Object}
    */
-  let hash = await ipcExec('getblockhash', [blockNumber]);
-  let blockRaw = await ipcExec('getblock', [hash, false]);
+  let hash = await exec('getblockhash', [blockNumber]);
+  let blockRaw = await exec('getblock', [hash, false]);
   let block = BlockModel.fromRaw(blockRaw, 'hex').getJSON(network);
 
 
@@ -30,7 +30,6 @@ module.exports = async (blockNumber) => {
   });
 
   return {
-    network: config.node.network,
     number: blockNumber,
     hash: block.hash,
     txs: txs,

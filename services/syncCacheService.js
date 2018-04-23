@@ -8,10 +8,9 @@ const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('../services/execService'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
   blockModel = require('../models/blockModel'),
-  utxoModel = require('../models/utxoModel'),
   txModel = require('../models/txModel'),
   getBlock = require('../utils/getBlock'),
   addBlock = require('../utils/addBlock'),
@@ -40,7 +39,6 @@ class SyncCacheService {
   async indexCollection () {
     log.info('indexing...');
     await blockModel.init();
-    await utxoModel.init();
     await txModel.init();
     log.info('indexation completed!');
   }
@@ -59,8 +57,8 @@ class SyncCacheService {
 
       } catch (err) {
 
-        if (err && err.code === 'ENOENT') {
-          log.error('ipc is not available');
+        if (err && (err.code === 'ENOENT' || err.code === 'ECONNECT')) {
+          log.error('node is not available');
           process.exit(0);
         }
 
@@ -71,7 +69,7 @@ class SyncCacheService {
 
   async runPeer (bucket) {
 
-    let lastBlock = await ipcExec('getblockhash', [_.last(bucket)]).catch(() => null);
+    let lastBlock = await exec('getblockhash', [_.last(bucket)]).catch(() => null);
 
     if (!lastBlock)
       return await Promise.delay(10000);
