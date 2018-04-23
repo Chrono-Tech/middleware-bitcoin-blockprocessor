@@ -25,9 +25,9 @@ Object.assign(ipcInstance.config, {
   unlink: true
 });
 
-ipcInstance.connectTo(ipcPath.name);
+ipcInstance.connectTo(ipcPath.base);
 
-ipcInstance.of[ipcPath.name].on('message', async data => {
+ipcInstance.of[ipcPath.base].on('message', async data => {
   if (!data.error) {
     callbacks[data.id](null, data.result);
     delete callbacks[data.id];
@@ -38,7 +38,7 @@ ipcInstance.of[ipcPath.name].on('message', async data => {
   delete callbacks[data.id];
 });
 
-ipcInstance.of[ipcPath.name].on('error', async err => {
+ipcInstance.of[ipcPath.base].on('error', async err => {
   for (let key of Object.keys(callbacks)) {
     callbacks[key](err);
     delete callbacks[key];
@@ -50,7 +50,7 @@ module.exports = async (method, params) => {
     const requestId = uniqid();
     callbacks[requestId] = (err, result) => err ? rej(err) : res(result);
 
-    ipcInstance.of[ipcPath.name].emit('message', JSON.stringify({
+    ipcInstance.of[ipcPath.base].emit('message', JSON.stringify({
       method: method,
       params: params,
       id: requestId
