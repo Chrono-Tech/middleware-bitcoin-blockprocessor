@@ -7,7 +7,7 @@
 const config = require('../config'),
   txModel = require('../models/txModel'),
   Promise = require('bluebird'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('../services/execService'),
   TX = require('bcoin/lib/primitives/tx'),
   _ = require('lodash');
 
@@ -47,7 +47,7 @@ module.exports = async (txs) => {
     .value();
 
   missedInputs = await Promise.map(missedInputs, async missedInputHash => {
-    let rawtx = await ipcExec('getrawtransaction', [missedInputHash]);
+    let rawtx = await exec('getrawtransaction', [missedInputHash]);
     return TX.fromRaw(rawtx, 'hex').toJSON();
   });
 

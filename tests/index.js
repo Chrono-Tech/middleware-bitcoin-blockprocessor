@@ -12,7 +12,7 @@ const config = require('../config'),
   bcoin = require('bcoin'),
   expect = require('chai').expect,
   Promise = require('bluebird'),
-  ipcExec = require('./helpers/ipcExec'),
+  exec = require('../services/execService'),
   _ = require('lodash'),
   ctx = {
     network: null,
@@ -44,7 +44,7 @@ describe('core/blockProcessor', function () {
 
   it('validate balance', async () => {
     let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    let coins = await ipcExec('getcoinsbyaddress', [keyring.getAddress().toString()]);
+    let coins = await exec('getcoinsbyaddress', [keyring.getAddress().toString()]);
 
     ctx.summ = _.chain(coins)
       .map(c => c.value)
@@ -55,13 +55,13 @@ describe('core/blockProcessor', function () {
 
   it('generate blocks and initial coins', async () => {
     let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    let response = await ipcExec('generatetoaddress', [10, keyring.getAddress().toString()]);
+    let response = await exec('generatetoaddress', [10, keyring.getAddress().toString()]);
     expect(response).to.not.be.undefined;
   });
 
   it('validate balance again', async () => {
     let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    let coins = await ipcExec('getcoinsbyaddress', [keyring.getAddress().toString()]);
+    let coins = await exec('getcoinsbyaddress', [keyring.getAddress().toString()]);
 
     let newSumm = _.chain(coins)
       .map(c => c.value)
@@ -76,7 +76,7 @@ describe('core/blockProcessor', function () {
     await Promise.delay(20000);
     const keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
     const address = keyring.getAddress().toString();
-    const coins = await ipcExec('getcoinsbyaddress', [address]);
+    const coins = await exec('getcoinsbyaddress', [address]);
     const unspentTxs = await txModel.find({'outputs.address': address, 'outputs.spent': false});
 
     let coinSumm = _.chain(coins)
