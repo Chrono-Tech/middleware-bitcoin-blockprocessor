@@ -10,10 +10,8 @@ const config = require('../config'),
   Promise = require('bluebird'),
   sem = require('semaphore')(1),
   blockModel = require('../models/blockModel'),
-  getUTXO = require('../utils/getUTXO'),
-  //utxoModel = require('../models/utxoModel'),
   txModel = require('../models/txModel'),
-  ipcExec = require('../services/ipcExec'),
+  exec = require('../services/execService'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
 
 /**
@@ -80,7 +78,7 @@ const updateDbStateWithBlockUP = async (block) => {
     await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: true}});
   });
 
-  const mempool = await ipcExec('getrawmempool', []);
+  const mempool = await exec('getrawmempool', []);
 
   await Promise.mapSeries(_.chunk(mempool, 100), async mempoolChunk => {
     await txModel.remove({blockNumber: -1, hash: {$nin: mempoolChunk}});
@@ -91,7 +89,7 @@ const updateDbStateWithBlockUP = async (block) => {
       return Promise.reject(err);
   });
 
-  block.txs = block.txs.map(tx=>tx.hash);
+  block.txs = block.txs.map(tx => tx.hash);
 
   await blockModel.update({number: block.number}, block, {upsert: true});
 
@@ -131,8 +129,16 @@ const rollbackStateFromBlock = async (block) => {
 
 const updateDbStateWithBlockDOWN = async (block) => {
 
-  block.txs = await getUTXO(block);
-//  console.log(block.txs)
+  block.txs = await Promise.map(block.txs, async tx => {
+    tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index) => {
+      output.spent = await txModel.count({
+        'inputs.prevout.hash': tx.hash,
+        'inputs.prevout.index': index
+      });
+      return output;
+    });
+    return tx;
+  });
 
   await txModel.insertMany(block.txs, {ordered: false}).catch(err => {
     if (err && err.code !== 11000)
