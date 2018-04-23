@@ -12,8 +12,11 @@
     "memwatch-next": "^0.3.0",
     "mongoose": "^4.13.7",
     "node-ipc": "^9.1.1",
+    "request": "^2.85.0",
+    "request-promise": "^4.2.2",
     "require-all": "^2.2.0",
     "semaphore": "^1.1.0",
+    "uniqid": "^4.1.1",
     "zeromq": "^4.6.0"
   },
   "devDependencies": {

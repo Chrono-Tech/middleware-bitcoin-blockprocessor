@@ -7,9 +7,9 @@
 const config = require('../config'),
   txModel = require('../models/txModel'),
   Promise = require('bluebird'),
-  Network = require('bcoin/lib/protocol/network'),
-  _ = require('lodash'),
-  network = Network.get(config.node.network);
+  exec = require('../services/execService'),
+  TX = require('bcoin/lib/primitives/tx'),
+  _ = require('lodash');
 
 /**
  * @service
@@ -20,8 +20,6 @@ const config = require('../config'),
 
 
 module.exports = async (txs) => {
-
-  txs = txs.map(tx => tx.getJSON(network));
 
   const inputHashesChunks = _.chain(txs)
     .map(tx => tx.inputs)
@@ -40,7 +38,20 @@ module.exports = async (txs) => {
 
   txsWithInputs = _.flattenDeep(txsWithInputs);
 
-  return txs.map(tx => {
+  let missedInputs = _.chain(txs)
+    .map(tx => tx.inputs)
+    .flattenDeep()
+    .map(input => input.prevout.hash)
+    .uniq()
+    .reject(hash => _.find(txsWithInputs, input => input.hash === hash) || hash === '0000000000000000000000000000000000000000000000000000000000000000')
+    .value();
+
+  missedInputs = await Promise.map(missedInputs, async missedInputHash => {
+    let rawtx = await exec('getrawtransaction', [missedInputHash]);
+    return TX.fromRaw(rawtx, 'hex').toJSON();
+  });
+
+  txs = txs.map(tx => {
     tx.outputs = tx.outputs.map(output => {
       return {
         address: output.address,
@@ -50,21 +61,34 @@ module.exports = async (txs) => {
 
     tx.inputs = tx.inputs.map(input => {
       input.value = _.chain(txsWithInputs)
+        .union(missedInputs)
         .find({hash: input.prevout.hash})
         .get(`outputs.${input.prevout.index}.value`, 0)
         .value();
-
       return input;
     });
+
+    const inputAmount = _.chain(tx.inputs)
+      .map(input => input.value)
+      .sum()
+      .defaults(0)
+      .value();
+
+    const outputAmount = _.chain(tx.outputs)
+      .map(output => output.value)
+      .sum()
+      .value();
 
     return {
       value: tx.value,
       hash: tx.hash,
-      fee: tx.fee,
-      minFee: tx.minFee,
+      fee: inputAmount <= 0 ? 0 : inputAmount - outputAmount,
       inputs: tx.inputs,
       outputs: tx.outputs
     };
 
   });
+
+  return txs;
+
 };

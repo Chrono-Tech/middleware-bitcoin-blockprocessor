@@ -32,7 +32,7 @@ module.exports = {
   mongo: {
     accounts: {
       uri: process.env.MONGO_ACCOUNTS_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/data',
-      collectionPrefix: process.env.MONGO_ACCOUNTS_COLLECTION_PREFIX || process.env.MONGO_COLLECTION_PREFIX ||'bitcoin'
+      collectionPrefix: process.env.MONGO_ACCOUNTS_COLLECTION_PREFIX || process.env.MONGO_COLLECTION_PREFIX || 'bitcoin'
     },
     data: {
       uri: process.env.MONGO_DATA_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/data',
@@ -52,7 +52,9 @@ module.exports = {
   node: {
     zmq: process.env.ZMQ || 'tcp://127.0.0.1:43332',
     network: process.env.NETWORK || 'regtest',
-    ipcName: process.env.IPC_NAME || 'bitcoin',
-    ipcPath: process.env.IPC_PATH || '/tmp/'
+    connectionURI: process.env.CONNECTION_URI || `${process.env.IPC_PATH || '/tmp/'}${process.env.IPC_NAME || 'bitcoin'}`,
+    user: process.env.NODE_USER_NAME,
+    password: process.env.NODE_USER_PASSWORD
+
   }
 };

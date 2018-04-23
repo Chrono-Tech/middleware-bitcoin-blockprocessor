@@ -13,7 +13,9 @@ const config = require('../config'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   EventEmitter = require('events'),
-  ipcExec = require('../services/ipcExec'),
+  Network = require('bcoin/lib/protocol/network'),
+  network = Network.get(config.node.network),
+  exec = require('../services/execService'),
   getBlock = require('../utils/getBlock'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'}),
   transformBlockTxs = require('../utils/transformBlockTxs');
@@ -44,7 +46,7 @@ class blockWatchingService {
 
     this.isSyncing = true;
 
-    const mempool = await ipcExec('getrawmempool', []);
+    const mempool = await exec('getrawmempool', []);
     if (!mempool.length)
       await txModel.remove({blockNumber: -1});
 
@@ -69,8 +71,8 @@ class blockWatchingService {
         this.events.emit('block', block);
       } catch (err) {
 
-        if (err && err.code === 'ENOENT') {
-          log.error('ipc is not available');
+        if (err && (err.code === 'ENOENT' || err.code === 'ECONNECT')) {
+          log.error('node is not available');
           process.exit(0);
         }
 
@@ -99,10 +101,13 @@ class blockWatchingService {
 
   async UnconfirmedTxEvent (tx) {
 
-    tx = TX.fromRaw(tx, 'hex');
+    tx = TX.fromRaw(tx, 'hex').getJSON();
 
     const fullTx = (await transformBlockTxs([tx]))[0];
-    await txModel.findOneAndUpdate({blockNumber: -1, hash: fullTx.hash}, fullTx, {upsert: true, setDefaultsOnInsert: true});
+    await txModel.findOneAndUpdate({blockNumber: -1, hash: fullTx.hash}, fullTx, {
+      upsert: true,
+      setDefaultsOnInsert: true
+    });
     this.events.emit('tx', fullTx);
   }
 
@@ -113,12 +118,15 @@ class blockWatchingService {
 
   async processBlock () {
 
-    let hash = await ipcExec('getblockhash', [this.currentHeight]);
+    let hash = await exec('getblockhash', [this.currentHeight]).catch(err =>
+      err.code && err.code === -32600 ? null : Promise.reject(err)
+    );
+
     if (!hash) {
       return Promise.reject({code: 0});
     }
 
-    const lastBlocks = await Promise.mapSeries(this.lastBlocks, async blockHash => await ipcExec('getblock', [blockHash, true]));
+    const lastBlocks = await Promise.map(this.lastBlocks, async blockHash => await exec('getblock', [blockHash, true]));
     const lastBlockHashes = _.chain(lastBlocks).map(block => _.get(block, 'hash')).compact().value();
 
     let savedBlocks = await blockModel.find({hash: {$in: lastBlockHashes}}, {number: 1}).limit(this.lastBlocks.length);
