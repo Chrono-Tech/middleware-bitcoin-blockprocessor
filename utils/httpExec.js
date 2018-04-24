@@ -20,7 +20,7 @@ module.exports = async (method, params) => {
       pass: config.node.password
     };
 
-  const data = await request(requestBody).catch(err => ({error: {code: 'ECONNECT'}}));
+  const data = await request(requestBody).catch(() => ({error: {code: 'ECONNECT'}}));
 
   if(data.error)
     return Promise.reject(data.error);
