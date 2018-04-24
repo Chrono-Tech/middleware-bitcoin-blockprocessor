@@ -124,7 +124,7 @@ class blockWatchingService {
     if (!hash)
       return Promise.reject({code: 0});
 
-    const lastBlockHash = await exec('getblockhash', [this.currentHeight - 1]);
+    const lastBlockHash = this.currentHeight === 0 ? null : await exec('getblockhash', [this.currentHeight - 1]);
     let savedBlock = await blockModel.findOne({hash: lastBlockHash}, {number: 1});
 
     if (!savedBlock && this.lastBlockHash)
