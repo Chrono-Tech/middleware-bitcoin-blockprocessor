@@ -48,8 +48,11 @@ module.exports = async (txs) => {
 
   missedInputs = await Promise.map(missedInputs, async missedInputHash => {
     let rawtx = await exec('getrawtransaction', [missedInputHash]);
-    return TX.fromRaw(rawtx, 'hex').toJSON();
-  });
+    let tx = TX.fromRaw(rawtx, 'hex').toJSON();
+    return _.pick(tx, ['hash', 'inputs', 'outputs']);
+  }, {concurrency: 1000});
+
+  txsWithInputs.push(...missedInputs);
 
   txs = txs.map(tx => {
     tx.outputs = tx.outputs.map(output => {
@@ -61,7 +64,6 @@ module.exports = async (txs) => {
 
     tx.inputs = tx.inputs.map(input => {
       input.value = _.chain(txsWithInputs)
-        .union(missedInputs)
         .find({hash: input.prevout.hash})
         .get(`outputs.${input.prevout.index}.value`, 0)
         .value();

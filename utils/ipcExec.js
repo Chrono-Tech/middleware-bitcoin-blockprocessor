@@ -55,5 +55,5 @@ module.exports = async (method, params) => {
       params: params,
       id: requestId
     }));
-  })
+  });
 };
