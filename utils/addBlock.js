@@ -9,6 +9,7 @@ const config = require('../config'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   sem = require('semaphore')(1),
+  transformBlockTxs = require('../utils/transformBlockTxs'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   exec = require('../services/execService'),
@@ -64,11 +65,15 @@ const updateDbStateWithBlockUP = async (block) => {
     .map(input => input.prevout)
     .value();
 
-  block.txs = block.txs.map(tx => {
+  let txs = await transformBlockTxs(block.txs);
+  txs = txs.map(tx => {
     tx.outputs = tx.outputs.map((output, index) => {
       output.spent = !!_.find(inputs, {hash: tx.hash, index: index});
       return output;
     });
+
+    tx.blockNumber = block.number;
+    tx.timestamp = block.time || Date.now();
     return tx;
   });
 
@@ -84,7 +89,7 @@ const updateDbStateWithBlockUP = async (block) => {
     await txModel.remove({blockNumber: -1, hash: {$nin: mempoolChunk}});
   });
 
-  await txModel.insertMany(block.txs, {ordered: false}).catch(err => {
+  await txModel.insertMany(txs, {ordered: false}).catch(err => {
     if (err && err.code !== 11000)
       return Promise.reject(err);
   });
@@ -129,7 +134,8 @@ const rollbackStateFromBlock = async (block) => {
 
 const updateDbStateWithBlockDOWN = async (block) => {
 
-  block.txs = await Promise.map(block.txs, async tx => {
+  let txs = await transformBlockTxs(block.txs);
+  txs = await Promise.map(txs, async tx => {
     tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index) => {
       output.spent = await txModel.count({
         'inputs.prevout.hash': tx.hash,
@@ -137,10 +143,14 @@ const updateDbStateWithBlockDOWN = async (block) => {
       });
       return output;
     });
+
+    tx.blockNumber = block.number;
+    tx.timestamp = block.time || Date.now();
+
     return tx;
   });
 
-  await txModel.insertMany(block.txs, {ordered: false}).catch(err => {
+  await txModel.insertMany(txs, {ordered: false}).catch(err => {
     if (err && err.code !== 11000)
       return Promise.reject(err);
   });
