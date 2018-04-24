@@ -51,7 +51,7 @@ class blockWatchingService {
       await txModel.remove({blockNumber: -1});
 
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
-    this.lastBlocks = [];
+    this.lastBlockHash = null;
     this.doJob();
     this.sock.on('message', this.pendingTxCallback);
   }
@@ -66,8 +66,7 @@ class blockWatchingService {
         await addBlock(block, 1);
 
         this.currentHeight++;
-        _.pullAt(this.lastBlocks, 0);
-        this.lastBlocks.push(block.hash);
+        this.lastBlockHash = block.hash;
         this.events.emit('block', block);
       } catch (err) {
 
@@ -83,12 +82,12 @@ class blockWatchingService {
         }
 
         if ([1, 11000].includes(_.get(err, 'code'))) {
-          const currentBlocks = await blockModel.find({
+          const currentBlock = await blockModel.find({
             network: config.node.network,
             timestamp: {$ne: 0}
-          }).sort({number: -1}).limit(config.consensus.lastBlocksValidateAmount);
-          this.lastBlocks = _.chain(currentBlocks).map(block => block.hash).reverse().value();
-          this.currentHeight = _.get(currentBlocks, '0.number', 0);
+          }).sort({number: -1}).limit(2);
+          this.lastBlockHash = _.get(currentBlock, '1.hash');
+          this.currentHeight = _.get(currentBlock, '0.number', 0);
           continue;
         }
 
@@ -122,18 +121,13 @@ class blockWatchingService {
       err.code && err.code === -32600 ? null : Promise.reject(err)
     );
 
-    if (!hash) {
+    if (!hash)
       return Promise.reject({code: 0});
-    }
 
-    const lastBlocks = await Promise.map(this.lastBlocks, async blockHash => await exec('getblock', [blockHash, true]));
-    const lastBlockHashes = _.chain(lastBlocks).map(block => _.get(block, 'hash')).compact().value();
+    const lastBlockHash = await exec('getblockhash', [this.currentHeight - 1]);
+    let savedBlock = await blockModel.findOne({hash: lastBlockHash}, {number: 1});
 
-    let savedBlocks = await blockModel.find({hash: {$in: lastBlockHashes}}, {number: 1}).limit(this.lastBlocks.length);
-    savedBlocks = _.chain(savedBlocks).map(block => block.number).orderBy().value();
-    const validatedBlocks = _.filter(savedBlocks, (s, i) => s === i + savedBlocks[0]);
-
-    if (validatedBlocks.length !== this.lastBlocks.length)
+    if (!savedBlock && this.lastBlockHash)
       return Promise.reject({code: 1}); //head has been blown off
 
     return getBlock(this.currentHeight);
