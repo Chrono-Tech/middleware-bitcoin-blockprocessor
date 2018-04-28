@@ -33,7 +33,7 @@ class blockWatchingService {
 
     this.sock = sock;
     this.events = new EventEmitter();
-    this.currentHeight = currentHeight;
+    this.currentHeight = currentHeight || 0;
     this.lastBlocks = [];
     this.isSyncing = false;
     this.pendingTxCallback = (topic, tx) => this.UnconfirmedTxEvent(tx);
