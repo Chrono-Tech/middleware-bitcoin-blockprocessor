@@ -27,6 +27,7 @@ require('dotenv').config();
  *    }
  *  }}
  */
+const getProviders = require('../utils/getProvidersFromConfig');
 
 module.exports = {
   mongo: {
@@ -50,9 +51,8 @@ module.exports = {
     shadow: parseInt(process.env.SYNC_SHADOW) || true
   },
   node: {
-    zmq: process.env.ZMQ || 'tcp://127.0.0.1:43332',
     network: process.env.NETWORK || 'regtest',
-    connectionURI: process.env.CONNECTION_URI || `${process.env.IPC_PATH || '/tmp/'}${process.env.IPC_NAME || 'bitcoin'}`,
+    providers: getProviders(),
     user: process.env.NODE_USER_NAME,
     password: process.env.NODE_USER_PASSWORD
 

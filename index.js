@@ -22,6 +22,7 @@ const filterTxsByAccountsService = require('./services/filterTxsByAccountsServic
   _ = require('lodash'),
   BlockWatchingService = require('./services/blockWatchingService'),
   SyncCacheService = require('./services/syncCacheService'),
+  ProviderService = require('./shared/services/providerService'),
   sock = zmq.socket('sub'),
   log = bunyan.createLogger({name: 'core.blockProcessor'});
 
