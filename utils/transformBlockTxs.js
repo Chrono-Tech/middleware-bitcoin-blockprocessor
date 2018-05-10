@@ -4,10 +4,8 @@
  * @author Egor Zuev <zyev.egor@gmail.com>
  */
 
-const config = require('../config'),
-  txModel = require('../models/txModel'),
+const txModel = require('../models/txModel'),
   Promise = require('bluebird'),
-  exec = require('../services/execService'),
   TX = require('bcoin/lib/primitives/tx'),
   _ = require('lodash');
 
@@ -19,7 +17,7 @@ const config = require('../config'),
  */
 
 
-module.exports = async (txs) => {
+module.exports = async (execService, txs) => {
 
   const inputHashesChunks = _.chain(txs)
     .map(tx => tx.inputs)
@@ -47,7 +45,7 @@ module.exports = async (txs) => {
     .value();
 
   missedInputs = await Promise.map(missedInputs, async missedInputHash => {
-    let rawtx = await exec('getrawtransaction', [missedInputHash]);
+    let rawtx = await execService.execMethod('getrawtransaction', [missedInputHash]);
     let tx = TX.fromRaw(rawtx, 'hex').toJSON();
     return _.pick(tx, ['hash', 'inputs', 'outputs']);
   }, {concurrency: 1000});

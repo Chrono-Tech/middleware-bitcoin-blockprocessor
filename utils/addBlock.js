@@ -12,7 +12,6 @@ const config = require('../config'),
   transformBlockTxs = require('../utils/transformBlockTxs'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
-  exec = require('../services/execService'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
 
 /**
@@ -23,15 +22,15 @@ const config = require('../config'),
  * @returns {Promise.<*>}
  */
 
-const addBlock = async (block, type) => {
+const addBlock = async (execService, block, type) => {
 
   return await new Promise((res, rej) => {
 
     sem.take(async () => {
       try {
         type === 0 ?
-          await updateDbStateWithBlockDOWN(block) :
-          await updateDbStateWithBlockUP(block);
+          await updateDbStateWithBlockDOWN(execService, block) :
+          await updateDbStateWithBlockUP(execService, block);
 
         res();
       } catch (err) {
@@ -57,7 +56,7 @@ const addBlock = async (block, type) => {
 
 };
 
-const updateDbStateWithBlockUP = async (block) => {
+const updateDbStateWithBlockUP = async (execService, block) => {
 
   const inputs = _.chain(block.txs)
     .map(tx => tx.inputs)
@@ -65,7 +64,7 @@ const updateDbStateWithBlockUP = async (block) => {
     .map(input => input.prevout)
     .value();
 
-  let txs = await transformBlockTxs(block.txs);
+  let txs = await transformBlockTxs(execService, block.txs);
   txs = txs.map(tx => {
     tx.outputs = tx.outputs.map((output, index) => {
       output.spent = !!_.find(inputs, {hash: tx.hash, index: index});
@@ -83,7 +82,7 @@ const updateDbStateWithBlockUP = async (block) => {
     await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: true}});
   });
 
-  const mempool = await exec('getrawmempool', []);
+  const mempool = await execService.execMethod('getrawmempool', []);
 
   await Promise.mapSeries(_.chunk(mempool, 100), async mempoolChunk => {
     await txModel.remove({blockNumber: -1, hash: {$nin: mempoolChunk}});
@@ -132,9 +131,9 @@ const rollbackStateFromBlock = async (block) => {
   });
 };
 
-const updateDbStateWithBlockDOWN = async (block) => {
+const updateDbStateWithBlockDOWN = async (execService, block) => {
 
-  let txs = await transformBlockTxs(block.txs);
+  let txs = await transformBlockTxs(execService, block.txs);
   txs = await Promise.map(txs, async tx => {
     tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index) => {
       output.spent = await txModel.count({

@@ -2,10 +2,10 @@ const request = require('request-promise'),
   uniqid = require('uniqid'),
   config = require('../config');
 
-module.exports = async (method, params) => {
+module.exports = async (uri, method, params) => {
 
   const requestBody = {
-    uri: config.node.connectionURI,
+    uri: uri,
     method: 'POST',
     json: {
       method: method,

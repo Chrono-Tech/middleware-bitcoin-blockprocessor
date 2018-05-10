@@ -18,11 +18,13 @@ mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMon
 const filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   amqp = require('amqplib'),
   bunyan = require('bunyan'),
-  zmq = require('zeromq'),
   _ = require('lodash'),
   BlockWatchingService = require('./services/blockWatchingService'),
   SyncCacheService = require('./services/syncCacheService'),
-  sock = zmq.socket('sub'),
+  ExecService = require('./services/execService'),
+  ProviderService = require('./services/providerService'),
+  NodeListenerService = require('./services/nodeListenerService'),
+  getHeightForProvider = require('./utils/getHeightForProvider'),
   log = bunyan.createLogger({name: 'core.blockProcessor'});
 
 /**
@@ -31,14 +33,7 @@ const filterTxsByAccountsService = require('./services/filterTxsByAccountsServic
  * services about new block or tx, where we meet registered address
  */
 
-sock.monitor(500, 0);
-sock.connect(config.node.zmq);
-sock.subscribe('rawtx');
 
-sock.on('close', () => {
-  log.error('zmq disconnected!');
-  process.exit(0);
-});
 
 
 [mongoose.accounts, mongoose.connection].forEach(connection =>
@@ -70,7 +65,14 @@ const init = async function () {
     channel = await amqpConn.createChannel();
   }
 
-  const syncCacheService = new SyncCacheService();
+  const providerService = new ProviderService(config.node.providers, getHeightForProvider);
+  await providerService.selectProvider();
+  const listenerService = new NodeListenerService(providerService);
+  await listenerService.start();
+
+  const execService = new ExecService(providerService);
+
+  const syncCacheService = new SyncCacheService(execService);
 
 
   syncCacheService.events.on('block', async block => {
@@ -101,7 +103,7 @@ const init = async function () {
     });
   });
 
-  const blockWatchingService = new BlockWatchingService(sock, endBlock);
+  const blockWatchingService = new BlockWatchingService(listenerService, execService, endBlock);
 
   await blockWatchingService.startSync().catch(e => {
     log.error(`error starting cache service: ${e}`);

@@ -8,7 +8,6 @@ const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
-  exec = require('../services/execService'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
@@ -25,13 +24,14 @@ const bunyan = require('bunyan'),
 
 class SyncCacheService {
 
-  constructor () {
+  constructor (execService) {
+    this.execService = execService;
     this.events = new EventEmitter();
   }
 
   async start () {
     await this.indexCollection();
-    let data = await allocateBlockBuckets();
+    let data = await allocateBlockBuckets(this.execService);
     this.doJob(data.missedBuckets);
     return data.height;
   }
@@ -69,7 +69,7 @@ class SyncCacheService {
 
   async runPeer (bucket) {
 
-    let lastBlock = await exec('getblockhash', [_.last(bucket)]).catch(() => null);
+    let lastBlock = await this.execService.execMethod('getblockhash', [_.last(bucket)]).catch(() => null);
 
     if (!lastBlock)
       return await Promise.delay(10000);
@@ -77,8 +77,9 @@ class SyncCacheService {
     log.info(`bitcoin provider took chuck of blocks ${bucket[0]} - ${_.last(bucket)}`);
 
     await Promise.mapSeries(bucket, async (blockNumber) => {
-      let block = await getBlock(blockNumber);
-      await addBlock(block, 0);
+      let block = await getBlock(this.execService, blockNumber);
+      await addBlock(this.execService, 
+        block, 0);
 
       _.pull(bucket, blockNumber);
       this.events.emit('block', block);
