@@ -8,11 +8,11 @@
 module.exports = class {
   /**
    * 
-   * @param {String} httpUri 
    * @param {String} wsUri 
+   * @param {String} httpUri 
    * @param {Number} height 
    */
-  constructor (httpUri, wsUri, height)
+  constructor (wsUri, httpUri, height)
   {
     this._ws = wsUri;
     this._http = httpUri;

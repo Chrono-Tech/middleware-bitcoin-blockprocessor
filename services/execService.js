@@ -1,9 +1,30 @@
-const config = require('../config'),
-  httpExec = require('../utils/httpExec'),
-  ipcExec = require('../utils/ipcExec'),
-  isHttpProvider = new RegExp(/(http|https):\/\//).test(config.node.connectionURI);
+/**
+ * 
+ * Copyright 2017–2018, LaborX PTY
+ * Licensed under the AGPL Version 3 license.
+ * @author Kirill Sergeev <cloudkserg11@gmail.com>
+ */
 
-module.exports = async (method, params) => {
-  return isHttpProvider ? await httpExec(method, params) :
-    await ipcExec(method, params);
+const httpExec = require('../utils/httpExec'),
+  ipcExec = require('../utils/ipcExec');
+
+const isHttpProvider = (httpUri) => {
+  return new RegExp(/(http|https):\/\//).test(httpUri);
 };
+
+
+class ExecService {
+  constructor(providerService) {
+    this.providerService = providerService;
+  }
+
+  async execMethod(method, params) {
+    const provider = await this.providerService.getProvider();
+    const httpUri = provider.getHttp();
+
+    return isHttpProvider(httpUri) ? await httpExec(httpUri, method, params) :
+      await ipcExec(httpUri, method, params);
+  }
+} 
+
+module.exports = ExecService;
