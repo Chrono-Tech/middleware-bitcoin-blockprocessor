@@ -6,13 +6,13 @@
 
 require('dotenv/config');
 
-const config = require('../config'),
+const config = require('./config'),
   Network = require('bcoin/lib/protocol/network'),
   txModel = require('../models/txModel'),
   bcoin = require('bcoin'),
   expect = require('chai').expect,
   Promise = require('bluebird'),
-  exec = require('../services/execService'),
+  exec = require('./services/execService'),
   _ = require('lodash'),
   ctx = {
     network: null,
