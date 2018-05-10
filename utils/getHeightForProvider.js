@@ -6,15 +6,24 @@
  */
 
 const httpExec = require('./httpExec'),
-  ipcExec = require('./ipcExec');
+  IpcExec = require('./ipcExec');
 
 const isHttpProvider = (httpUri) => {
   return new RegExp(/(http|https):\/\//).test(httpUri);
 };
 
+
+const doIpcExec = async(httpUri, method, params) => {
+  let ipcExec; 
+  if (!isHttpProvider(httpUri)) {
+    ipcExec = new IpcExec(httpUri);
+  }
+  return await ipcExec.execMethod(method, params);
+};
+
 const exec =async (httpUri, method, params) => {
   return isHttpProvider(httpUri) ? await httpExec(httpUri, method, params) :
-    await ipcExec(httpUri, method, params);
+    await doIpcExec(httpUri, method, params);
 };
 
 module.exports =  async (httpUri) => {

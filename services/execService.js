@@ -6,7 +6,7 @@
  */
 
 const httpExec = require('../utils/httpExec'),
-  ipcExec = require('../utils/ipcExec');
+  IpcExec = require('../utils/ipcExec');
 
 const isHttpProvider = (httpUri) => {
   return new RegExp(/(http|https):\/\//).test(httpUri);
@@ -16,6 +16,24 @@ const isHttpProvider = (httpUri) => {
 class ExecService {
   constructor(providerService) {
     this.providerService = providerService;
+    this.providerService.events.on('change', this.start.bind(this));
+  }
+
+  async start () {
+    const provider = await this.providerService.getProvider();
+    const httpUri = provider.getHttp();
+
+    if (!isHttpProvider(httpUri)) {
+      this.ipcExec = new IpcExec(httpUri);
+    }
+  }
+
+  async doIpcExec(httpUri, method, params) {
+    if (!isHttpProvider(httpUri)) {
+      this.ipcExec = new IpcExec(httpUri);
+    }
+
+    return await this.ipcExec.execMethod(method, params);
   }
 
   async execMethod(method, params) {
@@ -23,7 +41,7 @@ class ExecService {
     const httpUri = provider.getHttp();
 
     return isHttpProvider(httpUri) ? await httpExec(httpUri, method, params) :
-      await ipcExec(httpUri, method, params);
+      await this.doIpcExec(httpUri, method, params);
   }
 } 
 
