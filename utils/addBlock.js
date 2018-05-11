@@ -10,8 +10,11 @@ const config = require('../config'),
   Promise = require('bluebird'),
   sem = require('semaphore')(1),
   transformBlockTxs = require('../utils/transformBlockTxs'),
-  blockModel = require('../models/blockModel'),
-  txModel = require('../models/txModel'),
+  blockModel = require('../models').models.blockModel,
+  txModel = require('../models').models.txModel,
+  txInputsModel = require('../models').models.txInputsModel,
+  txOutputsModel = require('../models').models.txOutputsModel,
+  txAddressRelationsModel = require('../models').models.txAddressRelationsModel,
   exec = require('../services/execService'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
 
@@ -59,16 +62,16 @@ const addBlock = async (block, type) => {
 
 const updateDbStateWithBlockUP = async (block) => {
 
-  const inputs = _.chain(block.txs)
+  const prevouts = _.chain(block.txs)
     .map(tx => tx.inputs)
     .flattenDeep()
     .map(input => input.prevout)
     .value();
 
-  let txs = await transformBlockTxs(block.txs);
+  let txs = transformBlockTxs(block.txs);
   txs = txs.map(tx => {
     tx.outputs = tx.outputs.map((output, index) => {
-      output.spent = !!_.find(inputs, {hash: tx.hash, index: index});
+      output.spent = !!_.find(prevouts, {hash: tx.hash, index: index});
       return output;
     });
 
@@ -77,70 +80,122 @@ const updateDbStateWithBlockUP = async (block) => {
     return tx;
   });
 
+  const inputs = _.chain(txs)
+    .map(tx =>
+      tx.inputs.map(input => ({
+        txHash: tx.hash,
+        index: input.index,
+        prevoutIndex: input.prevout.index,
+        prevoutHash: input.prevout.hash,
+        value: input.value,
+        address: input.address
+      }))
+    )
+    .flattenDeep()
+    .value();
+
+  const outputs = _.chain(txs)
+    .map(tx =>
+      tx.outputs.map(output => ({
+        txHash: tx.hash,
+        spent: output.spent,
+        index: output.index,
+        value: output.value,
+        address: output.address
+      }))
+    )
+    .flattenDeep()
+    .value();
+
+  const addressRelationsInput = _.chain(inputs)
+    .map(input => ({address: input.address, hash: input.txHash, type: 0, blockNumber: block.number}))
+    .uniqWith(_.isEqual)
+    .value();
+
+  const addressRelationsOutput = _.chain(outputs)
+    .map(input => ({address: input.address, hash: input.txHash, type: 1, blockNumber: block.number}))
+    .uniqWith(_.isEqual)
+    .value();
+
+  const addressRelations = _.transform(_.union(addressRelationsInput, addressRelationsOutput), (result, item) => {
+    let foundItem = _.find(result, {address: item.address, hash: item.hash});
+    foundItem ?
+      foundItem.type = 2 : result.push(item);
+  }, []);
+
+  txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs', 'value']));
+
   log.info('updating utxos for block: ', block.number);
 
-  await Promise.map(inputs, async input => {
-    await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: true}});
-  });
+  await txOutputsModel.updateAll({
+    or: prevouts.map(prevout => ({txHash: prevout.hash, index: prevout.index}))
+  }, {spent: true});
 
   const mempool = await exec('getrawmempool', []);
 
-  await Promise.mapSeries(_.chunk(mempool, 100), async mempoolChunk => {
-    await txModel.remove({blockNumber: -1, hash: {$nin: mempoolChunk}});
-  });
+  log.info('removing pulled txs from mempool');
+  await txModel.destroyAll({blockNumber: -1, hash: {nin: mempool}});
 
-  await txModel.insertMany(txs, {ordered: false}).catch(err => {
-    if (err && err.code !== 11000)
-      return Promise.reject(err);
-  });
+  log.info(`inserting ${inputs.length} inputs`);
+  if (inputs.length)
+    await txInputsModel.create(inputs);
 
-  block.txs = block.txs.map(tx => tx.hash);
+  log.info(`inserting ${outputs.length} outputs`);
+  if (outputs.length)
+    await txOutputsModel.create(outputs);
 
-  await blockModel.update({number: block.number}, block, {upsert: true});
+  log.info(`inserting ${addressRelations.length} relations`);
+  if (addressRelations.length)
+    await txAddressRelationsModel.create(addressRelations);
 
+  log.info(`inserting ${txs.length} txs`);
+  if (txs.length)
+    await txModel.create(txs);
+
+  block = _.omit(block, 'txs');
+  block.id = block.number;
 };
 
 const rollbackStateFromBlock = async (block) => {
 
-  const blocksToDelete = await blockModel.find({
-    $or: [
-      {hash: {$lte: block.number, $gte: block.number - config.consensus.lastBlocksValidateAmount}},
-      {number: {$gte: block.number}}
-    ]
+  let txsToDelete = await blockModel.find({
+    where: {
+      blockNumber: {gte: block.number - 2}
+    }
   });
 
-  const inputs = _.chain(blocksToDelete)
-    .map(block => block.toObject().txs)
-    .flattenDeep()
-    .map(tx => tx.inputs)
-    .flattenDeep()
-    .uniqWith(_.isEqual)
-    .value();
+  txsToDelete = txsToDelete.map(tx => tx.hash);
+
+  const inputs = models.txInputsModel.find({
+    where: {
+      txHash: {inq: txsToDelete}
+    }
+  });
 
   log.info('rollback utxos from block: ', block.number);
 
-  await Promise.map(inputs, async input => {
-    await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: false}});
-  });
+  await txOutputsModel.updateAll({
+    or: inputs.map(input => ({txHash: input.prevoutHash, index: input.prevoutIndex}))
+  }, {spent: true});
 
-  await txModel.remove({blockNumber: {$gte: block.number}});
-  await blockModel.remove({
-    $or: [
-      {hash: {$lte: block.number, $gte: block.number - config.consensus.lastBlocksValidateAmount}},
-      {number: {$gte: block.number}}
-    ]
-  });
+  await models.txInputsModel.destroyAll({txHash: {inq: txsToDelete}});
+  await models.txOutputsModel.destroyAll({txHash: {inq: txsToDelete}});
+  await models.txAddressRelationsModel.destroyAll({hash: {inq: txsToDelete}});
+  await models.txModel.destroyAll({hash: {inq: txsToDelete}});
+  await models.blockModel.destroyAll({number: {gte: block.number - 2}});
+
 };
 
 const updateDbStateWithBlockDOWN = async (block) => {
 
-  let txs = await transformBlockTxs(block.txs);
+  let txs = transformBlockTxs(block.txs);
   txs = await Promise.map(txs, async tx => {
     tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index) => {
-      output.spent = await txModel.count({
-        'inputs.prevout.hash': tx.hash,
-        'inputs.prevout.index': index
-      });
+
+      output.spent = (await txInputsModel.count({
+          prevoutHash: tx.hash,
+          prevoutIndex: index
+        })) !== 0;
       return output;
     });
 
@@ -150,14 +205,71 @@ const updateDbStateWithBlockDOWN = async (block) => {
     return tx;
   });
 
-  await txModel.insertMany(txs, {ordered: false}).catch(err => {
-    if (err && err.code !== 11000)
-      return Promise.reject(err);
-  });
+  const inputs = _.chain(txs)
+    .map(tx =>
+      tx.inputs.map(input => ({
+        txHash: tx.hash,
+        index: input.index,
+        prevoutIndex: input.prevout.index,
+        prevoutHash: input.prevout.hash,
+        value: input.value,
+        address: input.address
+      }))
+    )
+    .flattenDeep()
+    .value();
 
-  block.txs = block.txs.map(tx => tx.hash);
+  const outputs = _.chain(txs)
+    .map(tx =>
+      tx.outputs.map(output => ({
+        txHash: tx.hash,
+        spent: output.spent,
+        index: output.index,
+        value: output.value,
+        address: output.address
+      }))
+    )
+    .flattenDeep()
+    .value();
 
-  await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
+  const addressRelationsInput = _.chain(inputs)
+    .map(input => ({address: input.address, hash: input.txHash, type: 0, blockNumber: block.number}))
+    .uniqWith(_.isEqual)
+    .value();
+
+  const addressRelationsOutput = _.chain(outputs)
+    .map(input => ({address: input.address, hash: input.txHash, type: 1, blockNumber: block.number}))
+    .uniqWith(_.isEqual)
+    .value();
+
+  const addressRelations = _.transform(_.union(addressRelationsInput, addressRelationsOutput), (result, item) => {
+    let foundItem = _.find(result, {address: item.address, hash: item.hash});
+    foundItem ?
+      foundItem.type = 2 : result.push(item);
+  }, []);
+
+  txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs', 'value']));
+
+  log.info(`inserting ${inputs.length} inputs`);
+  if (inputs.length)
+    await txInputsModel.create(inputs);
+
+  log.info(`inserting ${outputs.length} outputs`);
+  if (outputs.length)
+    await txOutputsModel.create(outputs);
+
+  log.info(`inserting ${addressRelations.length} relations`);
+  if (addressRelations.length)
+    await txAddressRelationsModel.create(addressRelations);
+
+  log.info(`inserting ${txs.length} txs`);
+  if (txs.length)
+    await txModel.create(txs);
+
+  block = _.omit(block, 'txs');
+  block.id = block.number;
+
+  await blockModel.create(block);
 
 };
 

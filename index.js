@@ -4,18 +4,11 @@
  * @author Egor Zuev <zyev.egor@gmail.com>
  */
 
-const mongoose = require('mongoose'),
+const models = require('./models'),
   config = require('./config'),
   customNetworkRegistrator = require('./networks'),
-  Promise = require('bluebird');
-
-customNetworkRegistrator(config.node.network);
-
-mongoose.Promise = Promise;
-mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
-mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
-
-const filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
+  Promise = require('bluebird'),
+  filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   amqp = require('amqplib'),
   bunyan = require('bunyan'),
   zmq = require('zeromq'),
@@ -24,6 +17,8 @@ const filterTxsByAccountsService = require('./services/filterTxsByAccountsServic
   SyncCacheService = require('./services/syncCacheService'),
   sock = zmq.socket('sub'),
   log = bunyan.createLogger({name: 'core.blockProcessor'});
+
+customNetworkRegistrator(config.node.network);
 
 /**
  * @module entry point
@@ -40,15 +35,16 @@ sock.on('close', () => {
   process.exit(0);
 });
 
-
-[mongoose.accounts, mongoose.connection].forEach(connection =>
+/*[mongoose.accounts, mongoose.connection].forEach(connection =>
   connection.on('disconnected', function () {
     log.error('mongo disconnected!');
     process.exit(0);
   })
-);
+);*/
 
 const init = async function () {
+
+  await models.init();
 
   let amqpConn = await amqp.connect(config.rabbit.url)
     .catch(() => {
@@ -71,7 +67,6 @@ const init = async function () {
   }
 
   const syncCacheService = new SyncCacheService();
-
 
   syncCacheService.events.on('block', async block => {
     log.info(`${block.hash} (${block.number}) added to cache.`);
@@ -100,6 +95,8 @@ const init = async function () {
       res();
     });
   });
+
+  return;
 
   const blockWatchingService = new BlockWatchingService(sock, endBlock);
 

@@ -29,13 +29,15 @@ require('dotenv').config();
  */
 
 module.exports = {
-  mongo: {
+  storage: {
     accounts: {
-      uri: process.env.MONGO_ACCOUNTS_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/data',
+      uri: process.env.STORAGE_ACCOUNTS_URI || process.env.STORAGE_URI || 'mongodb://localhost:27017/data',
+      type: process.env.STORAGE_ACCOUNTS_TYPE || process.env.STORAGE_TYPE || 'mongodb',
       collectionPrefix: process.env.MONGO_ACCOUNTS_COLLECTION_PREFIX || process.env.MONGO_COLLECTION_PREFIX || 'bitcoin'
     },
     data: {
-      uri: process.env.MONGO_DATA_URI || process.env.MONGO_URI || 'mongodb://localhost:27017/data',
+      uri: process.env.STORAGE_DATA_URI || process.env.STORAGE_URI || 'mongodb://localhost:27017/data',
+      type: process.env.STORAGE_DATA_TYPE || process.env.STORAGE_TYPE || 'mongodb',
       collectionPrefix: process.env.MONGO_DATA_COLLECTION_PREFIX || process.env.MONGO_COLLECTION_PREFIX || 'bitcoin'
     }
   },

@@ -5,7 +5,7 @@
  */
 
 const _ = require('lodash'),
-  accountModel = require('../models/accountModel');
+  accountModel = require('../models').models.accountModel;
 
 /**
  * @service
@@ -30,11 +30,13 @@ module.exports = async txs => {
 
   let filteredByChunks = await Promise.all(addresses.map(chunk =>
     accountModel.find({
-      address: {
-        $in: chunk
-      },
-      isActive: {
-        $ne: false
+      where: {
+        address: {
+          inq: chunk
+        },
+        isActive: {
+          neq: false
+        }
       }
     })
   ));

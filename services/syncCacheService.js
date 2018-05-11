@@ -30,17 +30,9 @@ class SyncCacheService {
   }
 
   async start () {
-    await this.indexCollection();
     let data = await allocateBlockBuckets();
     this.doJob(data.missedBuckets);
     return data.height;
-  }
-
-  async indexCollection () {
-    log.info('indexing...');
-    await blockModel.init();
-    await txModel.init();
-    log.info('indexation completed!');
   }
 
   async doJob (buckets) {
@@ -76,7 +68,11 @@ class SyncCacheService {
 
     log.info(`bitcoin provider took chuck of blocks ${bucket[0]} - ${_.last(bucket)}`);
 
-    await Promise.mapSeries(bucket, async (blockNumber) => {
+    let blocksToProcess = [];
+    for (let blockNumber = _.last(bucket); blockNumber > bucket[0]; blockNumber--)
+      blocksToProcess.push(blockNumber);
+
+    await Promise.mapSeries(blocksToProcess, async (blockNumber) => {
       let block = await getBlock(blockNumber);
       await addBlock(block, 0);
 

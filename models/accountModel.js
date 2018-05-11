@@ -4,28 +4,17 @@
  * @author Egor Zuev <zyev.egor@gmail.com>
  */
 
-const mongoose = require('mongoose'),
-  config = require('../config'),
-  messages = require('../factories/messages/addressMessageFactory');
+const config = require('../config');
 
-/** @model accountModel
- *  @description account model - represents an bitcoin account
- */
-const Account = new mongoose.Schema({
-  address: {
-    type: String,
-    unique: true,
-    required: true,
-    validate: [a => /^[a-km-zA-HJ-NP-Z1-9]{25,36}$/.test(a), messages.wrongAddress]
-  },
-  balances: {
-    confirmations0: {type: Number, default: 0, required: true},
-    confirmations3: {type: Number, default: 0, required: true},
-    confirmations6: {type: Number, default: 0, required: true}
-  },
-  isActive: {type: Boolean, required: true, default: true},
-  lastBlockCheck: {type: Number, default: 0, required: true},
-  created: {type: Date, required: true, default: Date.now}
-});
+module.exports = (ds) => {
+  return ds.accounts.define(`${config.storage.accounts.collectionPrefix}Accounts`, {
+    address: {type: String, unique: true, required: true},
+    balance0: {type: Number, default: 0},
+    balance3: {type: Number, default: 0},
+    balance6: {type: Number, default: 0},
+    isActive: {type: Boolean, required: true, default: true},
+    lastBlockCheck: {type: Number, default: 0, required: true},
+    created: {type: Date, required: true, default: Date.now}
+  });
 
-module.exports = mongoose.accounts.model(`${config.mongo.accounts.collectionPrefix}Account`, Account);
+};
