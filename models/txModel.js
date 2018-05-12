@@ -14,17 +14,14 @@ const config = require('../config');
 
 module.exports = (ds) => {
   return ds.data.define(`${config.storage.data.collectionPrefix}Txs`, {
+    hash: {type: String, id: true, generated: false},
     blockNumber: {type: Number, required: true, default: -1},
-    hash: {type: String},
     timestamp: {type: Date, required: true, default: Date.now},
     transactionIndex: {type: Number},
     created: {type: Date, required: true, default: Date.now}
   }, {
     indexes: {
-      tx_block_number_index: {blockNumber: 1},
-      tx_timestamp_index: {timestamp: 1},
-      tx_hash_index: {keys: {hash: 1}, options: {unique: true}},
-
+      tx_block_number_index: {blockNumber: 1}
     }
   });
 };

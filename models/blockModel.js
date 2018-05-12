@@ -14,9 +14,8 @@ const config = require('../config');
 
 module.exports = (ds) => {
   return ds.data.define(`${config.storage.data.collectionPrefix}Blocks`, {
-    id: {type: Number, id: true, generated: false},
-    number: {type: Number},
-    hash: {type: String},
+    hash: {type: String, id: true, generated: false},
+    number: {type: Number, required: true},
     timestamp: {type: Number, required: true},
     bits: {type: Number, required: true},
     merkleRoot: {type: String, required: true},
@@ -24,8 +23,7 @@ module.exports = (ds) => {
   }, {
     indexes: {
       block_number_index: {number: 1},
-      block_hash_index: {hash: 1},
-      block_timestamp_index: {timestamp: 1}
+      block_hash_index: {hash: 1}
     }
   });
 

@@ -9,11 +9,11 @@ const config = require('../config'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   sem = require('semaphore')(1),
+  crypto = require('crypto'),
   transformBlockTxs = require('../utils/transformBlockTxs'),
   blockModel = require('../models').models.blockModel,
   txModel = require('../models').models.txModel,
-  txInputsModel = require('../models').models.txInputsModel,
-  txOutputsModel = require('../models').models.txOutputsModel,
+  coinModel = require('../models').models.coinModel,
   txAddressRelationsModel = require('../models').models.txAddressRelationsModel,
   exec = require('../services/execService'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
@@ -188,89 +188,92 @@ const rollbackStateFromBlock = async (block) => {
 
 const updateDbStateWithBlockDOWN = async (block) => {
 
-  let txs = transformBlockTxs(block.txs);
-  txs = await Promise.map(txs, async tx => {
-    tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index) => {
+  let start = Date.now();
 
-      output.spent = (await txInputsModel.count({
-          prevoutHash: tx.hash,
-          prevoutIndex: index
-        })) !== 0;
-      return output;
-    });
+  let txs = block.txs.map(tx => _.merge(tx, {blockNumber: block.number, timestamp: block.time || Date.now()}));
 
-    tx.blockNumber = block.number;
-    tx.timestamp = block.time || Date.now();
+  const inputs = _.chain(block.txs)
+    .map(tx => tx.inputs.map((inCoin, index) => ({
+        id: crypto.createHash('sha256').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+        inputHash: tx.hash,
+        inputIndex: index,
+        outputHash: inCoin.prevout.hash,
+        outputIndex: inCoin.prevout.index,
+        address: inCoin.address
+      })
+    ))
+    .flattenDeep()
+    .filter(coin => coin.address)
+    .value();
 
-    return tx;
-  });
-
-  const inputs = _.chain(txs)
+  const outputs = _.chain(block.txs)
     .map(tx =>
-      tx.inputs.map(input => ({
-        txHash: tx.hash,
-        index: input.index,
-        prevoutIndex: input.prevout.index,
-        prevoutHash: input.prevout.hash,
-        value: input.value,
-        address: input.address
+      tx.outputs.map((outCoin, index) => ({
+        id: crypto.createHash('sha256').update(`${index}x${tx.hash}`).digest('hex'),
+        outputHash: tx.hash,
+        outputIndex: index,
+        value: outCoin.value,
+        address: outCoin.address
       }))
     )
     .flattenDeep()
+    .filter(coin => coin.address)
     .value();
 
-  const outputs = _.chain(txs)
-    .map(tx =>
-      tx.outputs.map(output => ({
-        txHash: tx.hash,
-        spent: output.spent,
-        index: output.index,
-        value: output.value,
-        address: output.address
-      }))
-    )
-    .flattenDeep()
-    .value();
+  console.log(`took0 : ${(Date.now() - start) / 1000} s`);
 
-  const addressRelationsInput = _.chain(inputs)
-    .map(input => ({address: input.address, hash: input.txHash, type: 0, blockNumber: block.number}))
-    .uniqWith(_.isEqual)
-    .value();
 
-  const addressRelationsOutput = _.chain(outputs)
-    .map(input => ({address: input.address, hash: input.txHash, type: 1, blockNumber: block.number}))
-    .uniqWith(_.isEqual)
-    .value();
+  let coins = _.chain(inputs).union(outputs).transform((result, coin) => {
+    let foundCoin = _.find(result, item => item.outputHash === coin.outputHash && item.outputIndex === coin.outputIndex);
 
-  const addressRelations = _.transform(_.union(addressRelationsInput, addressRelationsOutput), (result, item) => {
-    let foundItem = _.find(result, {address: item.address, hash: item.hash});
-    foundItem ?
-      foundItem.type = 2 : result.push(item);
+    if (!foundCoin)
+      return result.push(coin);
+
+    _.merge(foundCoin, coin);
+  }).value();
+
+
+  console.log(`took1 : ${(Date.now() - start) / 1000} s`);
+  
+  const addressRelations = _.transform(coins, (result, coin) => {
+    let hash = coin.inputHash && coin.value ? coin.inputHash : coin.inputHash ? coin.inputHash : coin.outputHash;
+
+    let foundItem = _.find(result, {address: coin.address, hash: hash});
+
+    if (foundItem && foundItem.type === 2)
+      return;
+
+    if (foundItem && ((foundItem.type === 1 && coin.inputHash) || (foundItem.type === 0 && coin.value))) {
+      foundItem.type = 2;
+      return;
+    }
+
+    let type = coin.inputHash && coin.value ? 2 : coin.inputHash ? 0 : 1;
+    result.push({address: coin.address, hash: hash, type: type, blockNumber: block.number});
+
   }, []);
+
+
+  console.log(`took2 : ${(Date.now() - start) / 1000} s`);
 
   txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs', 'value']));
 
-  log.info(`inserting ${inputs.length} inputs`);
-  if (inputs.length)
-    await txInputsModel.create(inputs);
+  log.info(`inserting ${txs.length} txs`);
+  if (txs.length)
+    await Promise.map(txs, async tx => await txModel.upsert(new txModel(tx)), {concurrency: 1000});
 
-  log.info(`inserting ${outputs.length} outputs`);
-  if (outputs.length)
-    await txOutputsModel.create(outputs);
+  log.info(`inserting ${coins.length} coins`);
+  if (coins.length)
+    await Promise.map(coins, async coin => await coinModel.upsert(coin), {concurrency: 1000});
+
 
   log.info(`inserting ${addressRelations.length} relations`);
   if (addressRelations.length)
-    await txAddressRelationsModel.create(addressRelations);
+    await Promise.map(addressRelations, async relation => await txAddressRelationsModel.upsert(relation), {concurrency: 1000});
 
-  log.info(`inserting ${txs.length} txs`);
-  if (txs.length)
-    await txModel.create(txs);
 
   block = _.omit(block, 'txs');
-  block.id = block.number;
-
   await blockModel.create(block);
-
 };
 
 module.exports = addBlock;

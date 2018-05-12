@@ -15,14 +15,19 @@ const models = requireAll({
 
 const init = async () => {
 
+/*  models.txModel.hasMany(models.txInputsModel, {as: 'inputs'});
+  models.txModel.hasMany(models.txOutputsModel, {as: 'outputs'});
+  models.txModel.hasMany(models.txAddressRelationsModel, {as: 'relations'});
+  models.txOutputsModel.hasOne(models.txInputsModel, {as: 'prevout'});*/
+
+
+
   for (let model of [models.accountModel.definition.name])
     await storages.accounts.autoupdate([model]).catch(async () => {
       await storages.accounts.automigrate([model]);
     });
 
-  for (let model of [models.txModel.definition.name, models.blockModel.definition.name,
-    models.txInputsModel.definition.name, models.txOutputsModel.definition.name,
-    models.txAddressRelationsModel.definition.name])
+  for (let model of [models.txModel.definition.name, models.blockModel.definition.name, models.coinModel.definition.name])
     await storages.data.autoupdate([model]).catch(async () => {
       await storages.data.automigrate([model]);
     });
