@@ -16,7 +16,7 @@ const config = require('../config'),
   coinModel = require('../models').models.coinModel,
   txAddressRelationsModel = require('../models').models.txAddressRelationsModel,
   exec = require('../services/execService'),
-  log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
+  log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
 /**
  * @service
@@ -206,15 +206,22 @@ const updateDbStateWithBlockDOWN = async (block) => {
 
   let start = Date.now();
 
-  let txs = block.txs.map(tx => _.merge(tx, {blockNumber: block.number, timestamp: block.time || Date.now()}));
+  let txs = block.txs.map(tx => ({
+      hash: tx.hash,
+      index: tx.index,
+      blockNumber: block.number,
+      timestamp: block.time || Date.now(),
+      inputs: tx.inputs,
+      outputs: tx.outputs
+    })
+  );
 
   const inputs = _.chain(block.txs)
     .map(tx => tx.inputs.map((inCoin, index) => ({
         id: crypto.createHash('sha256').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
-        inputHash: tx.hash,
+        inputTxIndex: tx.index,
         inputIndex: index,
-        outputHash: inCoin.prevout.hash,
-        outputIndex: inCoin.prevout.index,
+        inputBlockNumber: block.number,
         address: inCoin.address
       })
     ))
@@ -226,8 +233,9 @@ const updateDbStateWithBlockDOWN = async (block) => {
     .map(tx =>
       tx.outputs.map((outCoin, index) => ({
         id: crypto.createHash('sha256').update(`${index}x${tx.hash}`).digest('hex'),
-        outputHash: tx.hash,
+        outputTxIndex: tx.index,
         outputIndex: index,
+        outputBlockNumber: block.number,
         value: outCoin.value,
         address: outCoin.address
       }))
@@ -239,7 +247,7 @@ const updateDbStateWithBlockDOWN = async (block) => {
   console.log(`took0 : ${(Date.now() - start) / 1000} s`);
 
   let coins = _.chain(inputs).union(outputs).transform((result, coin) => {
-    let foundCoin = _.find(result, item => item.outputHash === coin.outputHash && item.outputIndex === coin.outputIndex);
+    let foundCoin = _.find(result, {id: coin.id});
 
     if (!foundCoin)
       return result.push(coin);
@@ -250,26 +258,26 @@ const updateDbStateWithBlockDOWN = async (block) => {
   console.log(`took1 : ${(Date.now() - start) / 1000} s`);
 
   const addressRelations = _.transform(coins, (result, coin) => {
-    let hash = coin.inputHash && coin.value ? coin.inputHash : coin.inputHash ? coin.inputHash : coin.outputHash;
+    let txIndex = coin.inputTxIndex && coin.value ? coin.inputTxIndex : coin.inputTxIndex ? coin.inputTxIndex : coin.outputTxIndex;
 
-    let foundItem = _.find(result, {address: coin.address, txHash: hash});
+    let foundItem = _.find(result, {address: coin.address, txIndex: txIndex});
 
     if (foundItem && foundItem.type === 2)
       return;
 
-    if (foundItem && ((foundItem.type === 1 && coin.inputHash) || (foundItem.type === 0 && coin.value))) {
+    if (foundItem && ((foundItem.type === 1 && coin.inputTxIndex) || (foundItem.type === 0 && coin.value))) {
       foundItem.type = 2;
       return;
     }
 
     if (!foundItem) {
-      let type = coin.inputHash && coin.value ? 2 : coin.inputHash ? 0 : 1;
+      let type = coin.inputTxIndex && coin.value ? 2 : coin.inputTxIndex ? 0 : 1;
       result.push({
         address: coin.address,
-        txHash: hash,
+        txIndex: txIndex,
         type: type,
         blockNumber: block.number,
-        id: crypto.createHash('sha256').update(`${coin.address}x${hash}`).digest('hex')
+        id: crypto.createHash('sha256').update(`${coin.address}x${block.number}x${txIndex}`).digest('hex')
       });
     }
 
@@ -277,21 +285,20 @@ const updateDbStateWithBlockDOWN = async (block) => {
 
   console.log(`took2 : ${(Date.now() - start) / 1000} s`);
 
-  txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs', 'value']));
+  txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs']));
 
   log.info(`inserting ${txs.length} txs`);
   if (txs.length)
-  //await Promise.map(txs, async tx => await txModel.upsert(new txModel(tx)), {concurrency: 1000});
-    await txModel.create(txs);
+    await Promise.mapSeries(txs, async tx => await txModel.upsert(new txModel(tx)));
 
   log.info(`inserting ${coins.length} coins`);
   if (coins.length)
-    await Promise.mapSeries(coins, async coin => await coinModel.upsert(coin), {concurrency: 1000});
+    await Promise.mapSeries(coins, async coin => await coinModel.upsert(coin));
 
   log.info(`inserting ${addressRelations.length} relations`);
   if (addressRelations.length)
-  //await Promise.map(addressRelations, async relation => await txAddressRelationsModel.upsert(relation), {concurrency: 1000});
-    await txAddressRelationsModel.create(addressRelations);
+    await Promise.mapSeries(addressRelations, async relation => await txAddressRelationsModel.upsert(relation));
+  //await txAddressRelationsModel.create(addressRelations);
 
   block = _.omit(block, 'txs');
   await blockModel.create(block);

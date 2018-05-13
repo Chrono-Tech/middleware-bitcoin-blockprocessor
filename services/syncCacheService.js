@@ -69,7 +69,7 @@ class SyncCacheService {
     log.info(`bitcoin provider took chuck of blocks ${bucket[0]} - ${_.last(bucket)}`);
 
     let blocksToProcess = [];
-    for (let blockNumber = _.last(bucket); blockNumber > bucket[0]; blockNumber--)
+    for (let blockNumber = _.last(bucket); blockNumber >= bucket[0]; blockNumber--)
       blocksToProcess.push(blockNumber);
 
     await Promise.mapSeries(blocksToProcess, async (blockNumber) => {

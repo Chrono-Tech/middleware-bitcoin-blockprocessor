@@ -16,13 +16,14 @@ module.exports = (ds) => {
   return ds.data.define(`${config.storage.data.collectionPrefix}TxAddressRelations`, {
     id: {type: String, id: true, generated: false},
     address: {type: String},
-    txHash: {type: String},
+    txIndex: {type: String},
     type: {type: Number},
     blockNumber: {type: Number}
   }, {
     indexes: {
-      tx_address_relation_hash_address_index: {keys: {address: 1, txHash: 1}, options: {unique: true}},
-      tx_address_relation_block_number_index: {blockNumber: 1}
+      tx_address_relation_address_index: {address: 1},
+      tx_address_relation_block_number_index: {blockNumber: 1},
+      tx_address_relation_tx_index_index: {txIndex: 1}
     }
   });
 };

@@ -17,11 +17,11 @@ module.exports = (ds) => {
     hash: {type: String, id: true, generated: false},
     blockNumber: {type: Number, required: true, default: -1},
     timestamp: {type: Date, required: true, default: Date.now},
-    transactionIndex: {type: Number},
+    index: {type: Number},
     created: {type: Date, required: true, default: Date.now}
   }, {
     indexes: {
-      tx_block_number_index: {blockNumber: 1}
+      tx_block_number_index_index: {blockNumber: 1, index: 1}
     }
   });
 };
