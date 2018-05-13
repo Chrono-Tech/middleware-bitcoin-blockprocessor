@@ -1,5 +1,6 @@
 const requireAll = require('require-all'),
   config = require('../config'),
+  Promise = require('bluebird'),
   DataSource = require('loopback-datasource-juggler').DataSource;
 
 const storages = {
@@ -15,19 +16,25 @@ const models = requireAll({
 
 const init = async () => {
 
-/*  models.txModel.hasMany(models.txInputsModel, {as: 'inputs'});
-  models.txModel.hasMany(models.txOutputsModel, {as: 'outputs'});
-  models.txModel.hasMany(models.txAddressRelationsModel, {as: 'relations'});
-  models.txOutputsModel.hasOne(models.txInputsModel, {as: 'prevout'});*/
+  [storages.accounts, storages.data].forEach(connector => {
+    connector.on('error', err => {
+      connector.emit('disconnected', err);
+    });
 
-
+    connector.pingIntervalId = setInterval(async () => {
+      await Promise.promisifyAll(connector).pingAsync().timeout(5000)
+        .catch((err) => {
+          connector.emit('disconnected', err);
+        })
+    }, 10000);
+  });
 
   for (let model of [models.accountModel.definition.name])
     await storages.accounts.autoupdate([model]).catch(async () => {
       await storages.accounts.automigrate([model]);
     });
 
-  for (let model of [models.txModel.definition.name, models.blockModel.definition.name, models.coinModel.definition.name])
+  for (let model of [models.txModel.definition.name, models.blockModel.definition.name, models.coinModel.definition.name, models.txAddressRelationsModel.definition.name])
     await storages.data.autoupdate([model]).catch(async () => {
       await storages.data.automigrate([model]);
     });

@@ -14,6 +14,7 @@ const config = require('../config');
 
 module.exports = (ds) => {
   return ds.data.define(`${config.storage.data.collectionPrefix}TxAddressRelations`, {
+    id: {type: String, id: true, generated: false},
     address: {type: String},
     txHash: {type: String},
     type: {type: Number},

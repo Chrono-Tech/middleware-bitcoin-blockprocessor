@@ -35,12 +35,13 @@ sock.on('close', () => {
   process.exit(0);
 });
 
-/*[mongoose.accounts, mongoose.connection].forEach(connection =>
-  connection.on('disconnected', function () {
-    log.error('mongo disconnected!');
+[models.storages.accounts, models.storages.data].forEach((connector, id) => {
+
+  connector.on('disconnected', () => {
+    log.error(`the ${id === 1 ? 'accounts' : 'data'} connector has been disconnected!`);
     process.exit(0);
-  })
-);*/
+  });
+});
 
 const init = async function () {
 
@@ -81,9 +82,11 @@ const init = async function () {
     .catch((err) => {
       if (_.get(err, 'code') === 0) {
         log.info('nodes are down or not synced!');
-        process.exit(0);
+      } else {
+        log.error(err);
       }
-      log.error(err);
+
+      process.exit(0);
     });
 
   await new Promise((res) => {

@@ -78,10 +78,6 @@ class SyncCacheService {
 
       _.pull(bucket, blockNumber);
       this.events.emit('block', block);
-    }).catch((e) => {
-      if (e && e.code === 11000)
-        return _.pull(bucket, bucket[0]);
-      log.error(e);
     });
   }
 }

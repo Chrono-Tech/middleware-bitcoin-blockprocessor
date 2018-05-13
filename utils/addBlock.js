@@ -38,19 +38,8 @@ const addBlock = async (block, type) => {
 
         res();
       } catch (err) {
-        if (type === 1 && [1, 11000].includes(_.get(err, 'code'))) {
-          let lastCheckpointBlock = await blockModel.findOne({
-            number: {
-              $lte: block.number - 1,
-              $gte: block.number - 1 + config.consensus.lastBlocksValidateAmount
-            }
-          }).sort({number: -1});
-          log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
-          await rollbackStateFromBlock(lastCheckpointBlock);
-        }
-
+        await rollbackStateFromBlock(block);
         rej(err);
-
       }
 
       sem.leave();
@@ -158,32 +147,59 @@ const updateDbStateWithBlockUP = async (block) => {
 
 const rollbackStateFromBlock = async (block) => {
 
-  let txsToDelete = await blockModel.find({
-    where: {
-      blockNumber: {gte: block.number - 2}
-    }
-  });
+  const inputs = _.chain(block.txs)
+    .map(tx => tx.inputs.map((inCoin, index) => ({
+        id: crypto.createHash('sha256').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+        inputHash: tx.hash,
+        inputIndex: index,
+        outputHash: inCoin.prevout.hash,
+        outputIndex: inCoin.prevout.index,
+        address: inCoin.address
+      })
+    ))
+    .flattenDeep()
+    .filter(coin => coin.address)
+    .value();
 
-  txsToDelete = txsToDelete.map(tx => tx.hash);
+  const outputs = _.chain(block.txs)
+    .map(tx =>
+      tx.outputs.map((outCoin, index) => ({
+        id: crypto.createHash('sha256').update(`${index}x${tx.hash}`).digest('hex'),
+        outputHash: tx.hash,
+        outputIndex: index,
+        value: outCoin.value,
+        address: outCoin.address
+      }))
+    )
+    .flattenDeep()
+    .filter(coin => coin.address)
+    .value();
 
-  const inputs = models.txInputsModel.find({
-    where: {
-      txHash: {inq: txsToDelete}
-    }
-  });
+  log.info('rolling back coins state');
+  if (inputs.length)
+    await Promise.mapSeries(inputs, async input => {
+      const isFullCoin = await coinModel.count({id: input.id, value: {gte: 0}});
+      isFullCoin ?
+        await coinModel.updateAll({id: input.id}, {inputHash: null, inputIndex: null}) :
+        await coinModel.destroyById(input.id);
+    });
 
-  log.info('rollback utxos from block: ', block.number);
+  if (outputs.length)
+    await Promise.mapSeries(outputs, async output => {
+      const isFullCoin = await coinModel.count({id: output.id, inputHash: {neq: null}});
+      isFullCoin ?
+        await coinModel.updateAll({id: output.id}, {value: null}) :
+        await coinModel.destroyById(output.id);
+    });
 
-  await txOutputsModel.updateAll({
-    or: inputs.map(input => ({txHash: input.prevoutHash, index: input.prevoutIndex}))
-  }, {spent: true});
+  log.info('rolling back relations state');
+  await txAddressRelationsModel.destroyAll({blockNumber: block.number});
 
-  await models.txInputsModel.destroyAll({txHash: {inq: txsToDelete}});
-  await models.txOutputsModel.destroyAll({txHash: {inq: txsToDelete}});
-  await models.txAddressRelationsModel.destroyAll({hash: {inq: txsToDelete}});
-  await models.txModel.destroyAll({hash: {inq: txsToDelete}});
-  await models.blockModel.destroyAll({number: {gte: block.number - 2}});
+  log.info('rolling back txs state');
+  await txModel.destroyAll({blockNumber: block.number});
 
+  log.info('rolling back blocks state');
+  await blockModel.destroyById({id: block.hash});
 };
 
 const updateDbStateWithBlockDOWN = async (block) => {
@@ -222,7 +238,6 @@ const updateDbStateWithBlockDOWN = async (block) => {
 
   console.log(`took0 : ${(Date.now() - start) / 1000} s`);
 
-
   let coins = _.chain(inputs).union(outputs).transform((result, coin) => {
     let foundCoin = _.find(result, item => item.outputHash === coin.outputHash && item.outputIndex === coin.outputIndex);
 
@@ -232,13 +247,12 @@ const updateDbStateWithBlockDOWN = async (block) => {
     _.merge(foundCoin, coin);
   }).value();
 
-
   console.log(`took1 : ${(Date.now() - start) / 1000} s`);
-  
+
   const addressRelations = _.transform(coins, (result, coin) => {
     let hash = coin.inputHash && coin.value ? coin.inputHash : coin.inputHash ? coin.inputHash : coin.outputHash;
 
-    let foundItem = _.find(result, {address: coin.address, hash: hash});
+    let foundItem = _.find(result, {address: coin.address, txHash: hash});
 
     if (foundItem && foundItem.type === 2)
       return;
@@ -248,11 +262,18 @@ const updateDbStateWithBlockDOWN = async (block) => {
       return;
     }
 
-    let type = coin.inputHash && coin.value ? 2 : coin.inputHash ? 0 : 1;
-    result.push({address: coin.address, hash: hash, type: type, blockNumber: block.number});
+    if (!foundItem) {
+      let type = coin.inputHash && coin.value ? 2 : coin.inputHash ? 0 : 1;
+      result.push({
+        address: coin.address,
+        txHash: hash,
+        type: type,
+        blockNumber: block.number,
+        id: crypto.createHash('sha256').update(`${coin.address}x${hash}`).digest('hex')
+      });
+    }
 
   }, []);
-
 
   console.log(`took2 : ${(Date.now() - start) / 1000} s`);
 
@@ -260,17 +281,17 @@ const updateDbStateWithBlockDOWN = async (block) => {
 
   log.info(`inserting ${txs.length} txs`);
   if (txs.length)
-    await Promise.map(txs, async tx => await txModel.upsert(new txModel(tx)), {concurrency: 1000});
+  //await Promise.map(txs, async tx => await txModel.upsert(new txModel(tx)), {concurrency: 1000});
+    await txModel.create(txs);
 
   log.info(`inserting ${coins.length} coins`);
   if (coins.length)
-    await Promise.map(coins, async coin => await coinModel.upsert(coin), {concurrency: 1000});
-
+    await Promise.mapSeries(coins, async coin => await coinModel.upsert(coin), {concurrency: 1000});
 
   log.info(`inserting ${addressRelations.length} relations`);
   if (addressRelations.length)
-    await Promise.map(addressRelations, async relation => await txAddressRelationsModel.upsert(relation), {concurrency: 1000});
-
+  //await Promise.map(addressRelations, async relation => await txAddressRelationsModel.upsert(relation), {concurrency: 1000});
+    await txAddressRelationsModel.create(addressRelations);
 
   block = _.omit(block, 'txs');
   await blockModel.create(block);
