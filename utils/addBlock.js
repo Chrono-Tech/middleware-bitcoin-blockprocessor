@@ -150,7 +150,7 @@ const rollbackStateFromBlock = async (block) => {
 
   const inputs = _.chain(block.txs)
     .map(tx => tx.inputs.map((inCoin, index) => ({
-        id: crypto.createHash('sha256').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+        id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
         inputHash: tx.hash,
         inputIndex: index,
         outputHash: inCoin.prevout.hash,
@@ -165,7 +165,7 @@ const rollbackStateFromBlock = async (block) => {
   const outputs = _.chain(block.txs)
     .map(tx =>
       tx.outputs.map((outCoin, index) => ({
-        id: crypto.createHash('sha256').update(`${index}x${tx.hash}`).digest('hex'),
+        id: crypto.createHash('md5').update(`${index}x${tx.hash}`).digest('hex'),
         outputHash: tx.hash,
         outputIndex: index,
         value: outCoin.value,
@@ -222,7 +222,7 @@ const updateDbStateWithBlockDOWN = async (block) => {
       _.chain(tx.inputs)
         .filter(coin => coin.address)
         .map((inCoin, index) => ({
-            id: crypto.createHash('sha256').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+            id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
             inputHash: tx.hash,
             inputIndex: index,
             outputHash: inCoin.prevout.hash,
@@ -240,7 +240,7 @@ const updateDbStateWithBlockDOWN = async (block) => {
       _.chain(tx.outputs)
         .filter(coin => coin.address)
         .map((outCoin, index) => ({
-          id: crypto.createHash('sha256').update(`${index}x${tx.hash}`).digest('hex'),
+          id: crypto.createHash('md5').update(`${index}x${tx.hash}`).digest('hex'),
           outputHash: tx.hash,
           outputIndex: index,
           value: outCoin.value,
@@ -289,7 +289,7 @@ const updateDbStateWithBlockDOWN = async (block) => {
         txIndex: txIndex,
         type: type,
         blockNumber: block.number,
-        id: crypto.createHash('sha256').update(`${coin.address}x${block.number}x${txIndex}`).digest('hex')
+        id: crypto.createHash('md5').update(`${coin.address}x${block.number}x${txIndex}`).digest('hex')
       };
     }
   }, [])

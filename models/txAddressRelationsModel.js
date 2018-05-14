@@ -16,7 +16,7 @@ module.exports = (ds) => {
   return ds.data.define(`${config.storage.data.collectionPrefix}TxAddressRelations`, {
     id: {type: String, id: true, generated: false},
     address: {type: String},
-    txIndex: {type: String},
+    txIndex: {type: Number},
     type: {type: Number},
     blockNumber: {type: Number}
   }, {
