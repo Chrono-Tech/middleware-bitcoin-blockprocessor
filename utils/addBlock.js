@@ -151,7 +151,8 @@ const rollbackStateFromBlock = async (block) => {
   const inputs = _.chain(block.txs)
     .map(tx => tx.inputs.map((inCoin, index) => ({
         id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
-        inputHash: tx.hash,
+        inputTxIndex: tx.index,
+        inputBlockNumber: tx.hash,
         inputIndex: index,
         outputHash: inCoin.prevout.hash,
         outputIndex: inCoin.prevout.index,
@@ -220,16 +221,15 @@ const updateDbStateWithBlockDOWN = async (block) => {
   const inputs = _.chain(block.txs)
     .map(tx =>
       _.chain(tx.inputs)
-        .filter(coin => coin.address)
         .map((inCoin, index) => ({
             id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
-            inputHash: tx.hash,
+            inputBlock: block.number,
+            inputTxIndex: tx.index,
             inputIndex: index,
-            outputHash: inCoin.prevout.hash,
-            outputIndex: inCoin.prevout.index,
             address: inCoin.address
           })
         )
+        .filter(coin => coin.address)
         .value()
     )
     .flattenDeep()
@@ -238,14 +238,15 @@ const updateDbStateWithBlockDOWN = async (block) => {
   const outputs = _.chain(block.txs)
     .map(tx =>
       _.chain(tx.outputs)
-        .filter(coin => coin.address)
         .map((outCoin, index) => ({
           id: crypto.createHash('md5').update(`${index}x${tx.hash}`).digest('hex'),
-          outputHash: tx.hash,
+          outputBlock: block.number,
+          outputTxIndex: tx.index,
           outputIndex: index,
           value: outCoin.value,
           address: outCoin.address
         }))
+        .filter(coin => coin.address)
         .value()
     )
     .flattenDeep()
@@ -265,31 +266,27 @@ const updateDbStateWithBlockDOWN = async (block) => {
 
   console.log(`took1 : ${(Date.now() - start) / 1000} s`);
 
-  const txHashIndexMap = _.transform(block.txs, (result, tx) => {
-    result[tx.hash] = tx.index;
-  }, {});
 
   const addressRelations = _.chain(coins).transform((result, coin) => {
-    let hash = coin.inputHash && coin.value ? coin.inputHash : coin.inputHash ? coin.inputHash : coin.outputHash;
-    let id = `${coin.address}x${hash}`;
+    let txIndex = coin.inputTxIndex && coin.value ? coin.inputTxIndex : coin.inputTxIndex ? coin.inputTxIndex : coin.outputTxIndex;
+    let id = crypto.createHash('md5').update(`${coin.address}x${block.number}x${txIndex}`).digest('hex');
 
     if (result[id] && result[id].type === 2)
       return;
 
-    if (result[id] && ((result[id].type === 1 && coin.inputHash) || (result[id].type === 0 && coin.value))) {
+    if (result[id] && ((result[id].type === 1 && coin.inputTxIndex) || (result[id].type === 0 && coin.value))) {
       result[id].type = 2;
       return;
     }
 
     if (!result[id]) {
-      let type = coin.inputHash && coin.value ? 2 : coin.inputHash ? 0 : 1;
-      let txIndex = txHashIndexMap[hash];
+      let type = coin.inputTxIndex && coin.value ? 2 : coin.inputTxIndex ? 0 : 1;
       result[id] = {
         address: coin.address,
         txIndex: txIndex,
         type: type,
         blockNumber: block.number,
-        id: crypto.createHash('md5').update(`${coin.address}x${block.number}x${txIndex}`).digest('hex')
+        id: id
       };
     }
   }, [])

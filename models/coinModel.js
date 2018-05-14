@@ -15,15 +15,18 @@ const config = require('../config');
 module.exports = (ds) => {
   return ds.data.define(`${config.storage.data.collectionPrefix}Coin`, {
     id: {type: String, id: true, generated: false},
-    outputHash: {type: String},
+    outputBlock: {type: Number},
+    outputTxIndex: {type: Number},
     outputIndex: {type: Number},
-    inputHash: {type: String},
+    inputBlock: {type: Number},
+    inputTxIndex: {type: Number},
     inputIndex: {type: Number},
     value: {type: String},
     address: {type: String}
   }, {
     indexes: {
-      coin_outputs_hash_index_index: {keys: {outputHash: 1, outputIndex: 1}, options: {unique: true}},
+      coin_outputs_block_tx_index_index_index: {keys: {outputBlock: 1, outputTxIndex: 1, outputIndex: 1}},
+      coin_inputs_block_tx_index_index_index: {keys: {inputBlock: 1, inputTxIndex: 1, inputIndex: 1}},
       coin_inputs_hash_index_index: {keys: {inputHash: 1, inputIndex: 1}},
       coin_address_index: {address: 1}
     }
