@@ -38,6 +38,7 @@ const addBlock = async (block, type) => {
 
         res();
       } catch (err) {
+        log.error(err);
         await rollbackStateFromBlock(block);
         rej(err);
       }
@@ -217,71 +218,83 @@ const updateDbStateWithBlockDOWN = async (block) => {
   );
 
   const inputs = _.chain(block.txs)
-    .map(tx => tx.inputs.map((inCoin, index) => ({
-        id: crypto.createHash('sha256').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
-        inputTxIndex: tx.index,
-        inputIndex: index,
-        inputBlockNumber: block.number,
-        address: inCoin.address
-      })
-    ))
+    .map(tx =>
+      _.chain(tx.inputs)
+        .filter(coin => coin.address)
+        .map((inCoin, index) => ({
+            id: crypto.createHash('sha256').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+            inputHash: tx.hash,
+            inputIndex: index,
+            outputHash: inCoin.prevout.hash,
+            outputIndex: inCoin.prevout.index,
+            address: inCoin.address
+          })
+        )
+        .value()
+    )
     .flattenDeep()
-    .filter(coin => coin.address)
     .value();
 
   const outputs = _.chain(block.txs)
     .map(tx =>
-      tx.outputs.map((outCoin, index) => ({
-        id: crypto.createHash('sha256').update(`${index}x${tx.hash}`).digest('hex'),
-        outputTxIndex: tx.index,
-        outputIndex: index,
-        outputBlockNumber: block.number,
-        value: outCoin.value,
-        address: outCoin.address
-      }))
+      _.chain(tx.outputs)
+        .filter(coin => coin.address)
+        .map((outCoin, index) => ({
+          id: crypto.createHash('sha256').update(`${index}x${tx.hash}`).digest('hex'),
+          outputHash: tx.hash,
+          outputIndex: index,
+          value: outCoin.value,
+          address: outCoin.address
+        }))
+        .value()
     )
     .flattenDeep()
-    .filter(coin => coin.address)
     .value();
 
   console.log(`took0 : ${(Date.now() - start) / 1000} s`);
 
   let coins = _.chain(inputs).union(outputs).transform((result, coin) => {
-    let foundCoin = _.find(result, {id: coin.id});
 
-    if (!foundCoin)
-      return result.push(coin);
+    if (!result[coin.id])
+      return result[coin.id] = coin;
 
-    _.merge(foundCoin, coin);
-  }).value();
+    _.merge(result[coin.id], coin);
+  }, {})
+    .values()
+    .value();
 
   console.log(`took1 : ${(Date.now() - start) / 1000} s`);
 
-  const addressRelations = _.transform(coins, (result, coin) => {
-    let txIndex = coin.inputTxIndex && coin.value ? coin.inputTxIndex : coin.inputTxIndex ? coin.inputTxIndex : coin.outputTxIndex;
+  const txHashIndexMap = _.transform(block.txs, (result, tx) => {
+    result[tx.hash] = tx.index;
+  }, {});
 
-    let foundItem = _.find(result, {address: coin.address, txIndex: txIndex});
+  const addressRelations = _.chain(coins).transform((result, coin) => {
+    let hash = coin.inputHash && coin.value ? coin.inputHash : coin.inputHash ? coin.inputHash : coin.outputHash;
+    let id = `${coin.address}x${hash}`;
 
-    if (foundItem && foundItem.type === 2)
+    if (result[id] && result[id].type === 2)
       return;
 
-    if (foundItem && ((foundItem.type === 1 && coin.inputTxIndex) || (foundItem.type === 0 && coin.value))) {
-      foundItem.type = 2;
+    if (result[id] && ((result[id].type === 1 && coin.inputHash) || (result[id].type === 0 && coin.value))) {
+      result[id].type = 2;
       return;
     }
 
-    if (!foundItem) {
-      let type = coin.inputTxIndex && coin.value ? 2 : coin.inputTxIndex ? 0 : 1;
-      result.push({
+    if (!result[id]) {
+      let type = coin.inputHash && coin.value ? 2 : coin.inputHash ? 0 : 1;
+      let txIndex = txHashIndexMap[hash];
+      result[id] = {
         address: coin.address,
         txIndex: txIndex,
         type: type,
         blockNumber: block.number,
         id: crypto.createHash('sha256').update(`${coin.address}x${block.number}x${txIndex}`).digest('hex')
-      });
+      };
     }
-
-  }, []);
+  }, [])
+    .values()
+    .value();
 
   console.log(`took2 : ${(Date.now() - start) / 1000} s`);
 
@@ -289,16 +302,21 @@ const updateDbStateWithBlockDOWN = async (block) => {
 
   log.info(`inserting ${txs.length} txs`);
   if (txs.length)
-    await Promise.mapSeries(txs, async tx => await txModel.upsert(new txModel(tx)));
+    await Promise.mapSeries(_.chunk(txs, 100), async chunk =>
+      await Promise.map(chunk, async tx => await txModel.upsert(new txModel(tx)))
+    );
 
   log.info(`inserting ${coins.length} coins`);
   if (coins.length)
-    await Promise.mapSeries(coins, async coin => await coinModel.upsert(coin));
+    await Promise.mapSeries(_.chunk(coins, 100), async chunk =>
+      await Promise.map(chunk, async coin => await coinModel.upsert(coin))
+    );
 
   log.info(`inserting ${addressRelations.length} relations`);
   if (addressRelations.length)
-    await Promise.mapSeries(addressRelations, async relation => await txAddressRelationsModel.upsert(relation));
-  //await txAddressRelationsModel.create(addressRelations);
+    await Promise.mapSeries(_.chunk(addressRelations, 100), async chunk =>
+      await Promise.map(chunk, async relation => await txAddressRelationsModel.upsert(relation))
+    );
 
   block = _.omit(block, 'txs');
   await blockModel.create(block);
