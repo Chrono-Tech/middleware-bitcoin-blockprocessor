@@ -8,12 +8,14 @@ const config = require('../config'),
   bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
-  sem = require('semaphore')(1),
+  sem = require('semaphore')(2),
+  crypto = require('crypto'),
   transformBlockTxs = require('../utils/transformBlockTxs'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
-  exec = require('../services/execService'),
-  log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
+  coinModel = require('../models/coinModel'),
+  txAddressRelationsModel = require('../models/txAddressRelationsModel'),
+  log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
 /**
  * @service
@@ -23,31 +25,18 @@ const config = require('../config'),
  * @returns {Promise.<*>}
  */
 
-const addBlock = async (block, type) => {
+const addBlock = async (block) => {
 
   return await new Promise((res, rej) => {
 
     sem.take(async () => {
       try {
-        type === 0 ?
-          await updateDbStateWithBlockDOWN(block) :
-          await updateDbStateWithBlockUP(block);
-
+        await updateDbStateWithBlock(block);
         res();
       } catch (err) {
-        if (type === 1 && [1, 11000].includes(_.get(err, 'code'))) {
-          let lastCheckpointBlock = await blockModel.findOne({
-            number: {
-              $lte: block.number - 1,
-              $gte: block.number - 1 + config.consensus.lastBlocksValidateAmount
-            }
-          }).sort({number: -1});
-          log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
-          await rollbackStateFromBlock(lastCheckpointBlock);
-        }
-
+        log.error(err);
+        await rollbackStateFromBlock(block);
         rej(err);
-
       }
 
       sem.leave();
@@ -57,108 +46,213 @@ const addBlock = async (block, type) => {
 
 };
 
-const updateDbStateWithBlockUP = async (block) => {
-
-  const inputs = _.chain(block.txs)
-    .map(tx => tx.inputs)
-    .flattenDeep()
-    .map(input => input.prevout)
-    .value();
-
-  let txs = await transformBlockTxs(block.txs);
-  txs = txs.map(tx => {
-    tx.outputs = tx.outputs.map((output, index) => {
-      output.spent = !!_.find(inputs, {hash: tx.hash, index: index});
-      return output;
-    });
-
-    tx.blockNumber = block.number;
-    tx.timestamp = block.time || Date.now();
-    return tx;
-  });
-
-  log.info('updating utxos for block: ', block.number);
-
-  await Promise.map(inputs, async input => {
-    await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: true}});
-  });
-
-  const mempool = await exec('getrawmempool', []);
-
-  await Promise.mapSeries(_.chunk(mempool, 100), async mempoolChunk => {
-    await txModel.remove({blockNumber: -1, hash: {$nin: mempoolChunk}});
-  });
-
-  await txModel.insertMany(txs, {ordered: false}).catch(err => {
-    if (err && err.code !== 11000)
-      return Promise.reject(err);
-  });
-
-  block.txs = block.txs.map(tx => tx.hash);
-
-  await blockModel.update({number: block.number}, block, {upsert: true});
-
-};
-
 const rollbackStateFromBlock = async (block) => {
 
-  const blocksToDelete = await blockModel.find({
-    $or: [
-      {hash: {$lte: block.number, $gte: block.number - config.consensus.lastBlocksValidateAmount}},
-      {number: {$gte: block.number}}
-    ]
-  });
+  let txs = block.txs.map(tx => ({
+      _id: tx.hash,
+      index: tx.index,
+      blockNumber: block.number,
+      timestamp: block.time || Date.now(),
+      inputs: tx.inputs,
+      outputs: tx.outputs
+    })
+  );
 
-  const inputs = _.chain(blocksToDelete)
-    .map(block => block.toObject().txs)
+  const inputs = _.chain(txs)
+    .map(tx =>
+      _.chain(tx.inputs)
+        .map((inCoin, index) => ({
+            _id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+            inputBlock: block.number,
+            inputTxIndex: tx.index,
+            inputIndex: index,
+            address: inCoin.address
+          })
+        )
+        .filter(coin => coin.address)
+        .value()
+    )
     .flattenDeep()
-    .map(tx => tx.inputs)
-    .flattenDeep()
-    .uniqWith(_.isEqual)
     .value();
 
-  log.info('rollback utxos from block: ', block.number);
+  const outputs = _.chain(txs)
+    .map(tx =>
+      _.chain(tx.outputs)
+        .map((outCoin, index) => ({
+          _id: crypto.createHash('md5').update(`${index}x${tx._id}`).digest('hex'),
+          outputBlock: block.number,
+          outputTxIndex: tx.index,
+          outputIndex: index,
+          value: outCoin.value,
+          address: outCoin.address
+        }))
+        .filter(coin => coin.address)
+        .value()
+    )
+    .flattenDeep()
+    .value();
 
-  await Promise.map(inputs, async input => {
-    await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: false}});
-  });
-
-  await txModel.remove({blockNumber: {$gte: block.number}});
-  await blockModel.remove({
-    $or: [
-      {hash: {$lte: block.number, $gte: block.number - config.consensus.lastBlocksValidateAmount}},
-      {number: {$gte: block.number}}
-    ]
-  });
-};
-
-const updateDbStateWithBlockDOWN = async (block) => {
-
-  let txs = await transformBlockTxs(block.txs);
-  txs = await Promise.map(txs, async tx => {
-    tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index) => {
-      output.spent = await txModel.count({
-        'inputs.prevout.hash': tx.hash,
-        'inputs.prevout.index': index
-      });
-      return output;
+  log.info('rolling back coins state');
+  if (inputs.length)
+    await Promise.mapSeries(inputs, async input => {
+      const isFullCoin = await coinModel.count({_id: input._id, outputTxIndex: {$ne: null}, inputTxIndex: {$ne: null}});
+      isFullCoin ?
+        await coinModel.update({_id: input._id}, {$set: {inputTxIndex: null, inputIndex: null, inputBlock: null}}) :
+        await coinModel.remove({_id: input._id});
     });
 
-    tx.blockNumber = block.number;
-    tx.timestamp = block.time || Date.now();
+  if (outputs.length)
+    await Promise.mapSeries(outputs, async output => {
+      const isFullCoin = await coinModel.count({id: output.id, inputHash: {neq: null}});
+      isFullCoin ?
+        await coinModel.update({_id: output._id}, {$set: {outputTxIndex: null, outputIndex: null, outputBlock: null, value: null}}) :
+        await coinModel.remove({_id: output._id});
+    });
 
-    return tx;
-  });
+  log.info('rolling back relations state');
+  await txAddressRelationsModel.remove({blockNumber: block.number});
 
-  await txModel.insertMany(txs, {ordered: false}).catch(err => {
-    if (err && err.code !== 11000)
-      return Promise.reject(err);
-  });
+  log.info('rolling back txs state');
+  await txModel.remove({blockNumber: block.number});
 
-  block.txs = block.txs.map(tx => tx.hash);
+  log.info('rolling back blocks state');
+  await blockModel.remove({_id: block.hash});
+};
 
-  await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
+const updateDbStateWithBlock = async (block) => {
 
+  let start = Date.now();
+
+  let txs = block.txs.map(tx => ({
+      _id: tx.hash,
+      index: tx.index,
+      blockNumber: block.number,
+      timestamp: block.time || Date.now(),
+      inputs: tx.inputs,
+      outputs: tx.outputs
+    })
+  );
+
+  const inputs = _.chain(txs)
+    .map(tx =>
+      _.chain(tx.inputs)
+        .map((inCoin, index) => ({
+            _id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+            inputBlock: block.number,
+            inputTxIndex: tx.index,
+            inputIndex: index,
+            address: inCoin.address
+          })
+        )
+        .filter(coin => coin.address)
+        .value()
+    )
+    .flattenDeep()
+    .value();
+
+  const outputs = _.chain(txs)
+    .map(tx =>
+      _.chain(tx.outputs)
+        .map((outCoin, index) => ({
+          _id: crypto.createHash('md5').update(`${index}x${tx._id}`).digest('hex'),
+          outputBlock: block.number,
+          outputTxIndex: tx.index,
+          outputIndex: index,
+          value: outCoin.value,
+          address: outCoin.address
+        }))
+        .filter(coin => coin.address)
+        .value()
+    )
+    .flattenDeep()
+    .value();
+
+  console.log(`took0 : ${(Date.now() - start) / 1000} s`);
+
+  let coins = _.chain(inputs).union(outputs).transform((result, coin) => {
+
+    if (!result[coin._id])
+      return result[coin._id] = coin;
+
+    _.merge(result[coin._id], coin);
+  }, {})
+    .values()
+    .value();
+
+  console.log(`took1 : ${(Date.now() - start) / 1000} s`);
+
+  const addressRelations = _.chain(coins).transform((result, coin) => {
+    let txIndex = coin.inputTxIndex && coin.value ? coin.inputTxIndex : coin.inputTxIndex ? coin.inputTxIndex : coin.outputTxIndex;
+    let id = crypto.createHash('md5').update(`${coin.address}x${block.number}x${txIndex}`).digest('hex');
+
+    if (result[id] && result[id].type === 2)
+      return;
+
+    if (result[id] && ((result[id].type === 1 && coin.inputTxIndex) || (result[id].type === 0 && coin.value))) {
+      result[id].type = 2;
+      return;
+    }
+
+    if (!result[id]) {
+      let type = coin.inputTxIndex && coin.value ? 2 : coin.inputTxIndex ? 0 : 1;
+      result[id] = {
+        address: coin.address,
+        txIndex: txIndex,
+        type: type,
+        blockNumber: block.number,
+        _id: id
+      };
+    }
+  }, [])
+    .values()
+    .value();
+
+  txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs']));
+
+  log.info(`inserting ${txs.length} txs`);
+  if (txs.length) {
+    let bulkOps = txs.map(tx => ({
+      updateOne: {
+        filter: {_id: tx._id},
+        update: tx,
+        upsert: true
+      }
+    }));
+
+    await txModel.bulkWrite(bulkOps);
+  }
+
+  log.info(`inserting ${coins.length} coins`);
+  if (coins.length) {
+    let bulkOps = coins.map(coin => ({
+      updateOne: {
+        filter: {_id: coin._id},
+        update: {$set: coin},
+        upsert: true
+      }
+    }));
+
+    await coinModel.bulkWrite(bulkOps);
+  }
+
+  log.info(`inserting ${addressRelations.length} relations`);
+  if (addressRelations.length) {
+    let bulkOps = addressRelations.map(relation => ({
+      updateOne: {
+        filter: {_id: relation._id},
+        update: relation,
+        upsert: true
+      }
+    }));
+
+    await txAddressRelationsModel.bulkWrite(bulkOps);
+  }
+
+  let blockHash = block.hash;
+  block = _.omit(block, ['txs', 'hash']);
+  block = new blockModel(block);
+  block._id = blockHash;
+  await block.save();
 };
 
 module.exports = addBlock;

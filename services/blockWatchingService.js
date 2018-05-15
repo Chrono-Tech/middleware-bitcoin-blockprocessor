@@ -63,7 +63,7 @@ class blockWatchingService {
       try {
 
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
-        await addBlock(block, 1);
+        await addBlock(block);
 
         this.currentHeight++;
         this.lastBlockHash = block.hash;
@@ -81,10 +81,9 @@ class blockWatchingService {
           continue;
         }
 
-        if ([1, 11000].includes(_.get(err, 'code'))) {
+        if (_.get(err, 'code') === 1) {
           const currentBlock = await blockModel.find({
-            network: config.node.network,
-            timestamp: {$ne: 0}
+            number: {$gte: 0}
           }).sort({number: -1}).limit(2);
           this.lastBlockHash = _.get(currentBlock, '1.hash');
           this.currentHeight = _.get(currentBlock, '0.number', 0);
@@ -103,7 +102,7 @@ class blockWatchingService {
     tx = TX.fromRaw(tx, 'hex').getJSON();
 
     const fullTx = (await transformBlockTxs([tx]))[0];
-    await txModel.findOneAndUpdate({blockNumber: -1, hash: fullTx.hash}, fullTx, {
+    await txModel.findOneAndUpdate({_id: fullTx.hash}, fullTx, {
       upsert: true,
       setDefaultsOnInsert: true
     });
@@ -125,7 +124,7 @@ class blockWatchingService {
       return Promise.reject({code: 0});
 
     const lastBlockHash = this.currentHeight === 0 ? null : await exec('getblockhash', [this.currentHeight - 1]);
-    let savedBlock = await blockModel.findOne({hash: lastBlockHash}, {number: 1});
+    let savedBlock = await blockModel.count({_id: lastBlockHash});
 
     if (!savedBlock && this.lastBlockHash)
       return Promise.reject({code: 1}); //head has been blown off

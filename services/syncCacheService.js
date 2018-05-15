@@ -76,16 +76,16 @@ class SyncCacheService {
 
     log.info(`bitcoin provider took chuck of blocks ${bucket[0]} - ${_.last(bucket)}`);
 
-    await Promise.mapSeries(bucket, async (blockNumber) => {
+    let blocksToProcess = [];
+    for (let blockNumber = _.last(bucket); blockNumber >= bucket[0]; blockNumber--)
+      blocksToProcess.push(blockNumber);
+
+    await Promise.mapSeries(blocksToProcess, async (blockNumber) => {
       let block = await getBlock(blockNumber);
-      await addBlock(block, 0);
+      await addBlock(block);
 
       _.pull(bucket, blockNumber);
       this.events.emit('block', block);
-    }).catch((e) => {
-      if (e && e.code === 11000)
-        return _.pull(bucket, bucket[0]);
-      log.error(e);
     });
   }
 }
