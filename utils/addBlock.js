@@ -8,9 +8,9 @@ const config = require('../config'),
   bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
-  sem = require('semaphore')(2),
+  sem = require('semaphore')(3),
   crypto = require('crypto'),
-  transformBlockTxs = require('../utils/transformBlockTxs'),
+  exec = require('../services/execService'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   coinModel = require('../models/coinModel'),
@@ -105,7 +105,14 @@ const rollbackStateFromBlock = async (block) => {
     await Promise.mapSeries(outputs, async output => {
       const isFullCoin = await coinModel.count({id: output.id, inputHash: {neq: null}});
       isFullCoin ?
-        await coinModel.update({_id: output._id}, {$set: {outputTxIndex: null, outputIndex: null, outputBlock: null, value: null}}) :
+        await coinModel.update({_id: output._id}, {
+          $set: {
+            outputTxIndex: null,
+            outputIndex: null,
+            outputBlock: null,
+            value: null
+          }
+        }) :
         await coinModel.remove({_id: output._id});
     });
 
@@ -119,7 +126,7 @@ const rollbackStateFromBlock = async (block) => {
   await blockModel.remove({_id: block.hash});
 };
 
-const updateDbStateWithBlock = async (block) => {
+const updateDbStateWithBlock = async (block, removePending = false) => {
 
   let start = Date.now();
 
@@ -182,7 +189,7 @@ const updateDbStateWithBlock = async (block) => {
   console.log(`took1 : ${(Date.now() - start) / 1000} s`);
 
   const addressRelations = _.chain(coins).transform((result, coin) => {
-    let txIndex = coin.inputTxIndex && coin.value ? coin.inputTxIndex : coin.inputTxIndex ? coin.inputTxIndex : coin.outputTxIndex;
+    let txIndex = _.isNumber(coin.inputTxIndex) ? coin.inputTxIndex : coin.outputTxIndex;
     let id = crypto.createHash('md5').update(`${coin.address}x${block.number}x${txIndex}`).digest('hex');
 
     if (result[id] && result[id].type === 2)
@@ -248,11 +255,42 @@ const updateDbStateWithBlock = async (block) => {
     await txAddressRelationsModel.bulkWrite(bulkOps);
   }
 
-  let blockHash = block.hash;
-  block = _.omit(block, ['txs', 'hash']);
-  block = new blockModel(block);
-  block._id = blockHash;
-  await block.save();
+  if (removePending) {
+    const mempool = await exec('getrawmempool', []);
+
+    log.info('removing confirmed / rejected txs');
+    if (!mempool.length) {
+      let outdatedTxs = await txModel.find({_id: {$nin: mempool}, blockNumber: -1});
+
+      if (outdatedTxs.length) {
+
+        await coinModel.remove({
+          $or: _.chain(outdatedTxs).map(tx => {
+            return [
+              {outputBlock: -1, outputTxIndex: tx.index},
+              {inputBlock: -1, inputTxIndex: tx.index}
+            ]
+          }).flattenDeep().value()
+        });
+
+        await txAddressRelationsModel.remove({
+          $or: outdatedTxs.map(tx => ({blockNumber: -1, txIndex: tx.index}))
+        });
+
+        await txModel.remove({_id: {$nin: mempool}, blockNumber: -1});
+
+      }
+    }
+  }
+
+  if (block.hash) {
+    let blockHash = block.hash;
+    block = _.omit(block, ['txs', 'hash']);
+    block = new blockModel(block);
+    block._id = blockHash;
+    await blockModel.update({_id: blockHash}, block.toObject(), {upsert: true});
+  }
+
 };
 
 module.exports = addBlock;

@@ -12,13 +12,14 @@ const config = require('../config'),
   addBlock = require('../utils/addBlock'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
+  coinModel = require('../models/coinModel'),
+  txAddressRelationsModel = require('../models/txAddressRelationsModel'),
   EventEmitter = require('events'),
   Network = require('bcoin/lib/protocol/network'),
   network = Network.get(config.node.network),
   exec = require('../services/execService'),
   getBlock = require('../utils/getBlock'),
-  log = bunyan.createLogger({name: 'app.services.blockWatchingService'}),
-  transformBlockTxs = require('../utils/transformBlockTxs');
+  log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
 
 /**
  * @service
@@ -47,8 +48,17 @@ class blockWatchingService {
     this.isSyncing = true;
 
     const mempool = await exec('getrawmempool', []);
-    if (!mempool.length)
+    if (!mempool.length) {
       await txModel.remove({blockNumber: -1});
+      await coinModel.remove({
+        $or: [
+          {inputBlock: -1},
+          {outputBlock: -1}
+        ]
+      });
+      await txAddressRelationsModel.remove({blockNumber: -1});
+
+    }
 
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
     this.lastBlockHash = null;
@@ -63,7 +73,7 @@ class blockWatchingService {
       try {
 
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
-        await addBlock(block);
+        await addBlock(block, true);
 
         this.currentHeight++;
         this.lastBlockHash = block.hash;
@@ -99,14 +109,11 @@ class blockWatchingService {
 
   async UnconfirmedTxEvent (tx) {
 
-    tx = TX.fromRaw(tx, 'hex').getJSON();
+    tx = TX.fromRaw(tx, 'hex').getJSON(network);
+    tx.index = await txModel.count({blockNumber: -1});
+    await addBlock({number: -1, txs: [tx]});
 
-    const fullTx = (await transformBlockTxs([tx]))[0];
-    await txModel.findOneAndUpdate({_id: fullTx.hash}, fullTx, {
-      upsert: true,
-      setDefaultsOnInsert: true
-    });
-    this.events.emit('tx', fullTx);
+    this.events.emit('tx', tx);
   }
 
   async stopSync () {
