@@ -35,14 +35,12 @@ const addBlock = async (block, removePending = false) => {
       try {
 
         block.number === -1 ?
-          await updateDbStateWithUnconfirmedTxs(block).catch(()=>console.log('super')) :
+          await updateDbStateWithUnconfirmedTxs(block).catch(() => null) :
           await updateDbStateWithBlock(block, removePending);
         res();
       } catch (err) {
         log.error(err);
-        process.exit(0);
         await rollbackStateFromBlock(block);
-        process.exit(0);
         rej(err);
       }
 
