@@ -5,7 +5,6 @@
  */
 
 const _ = require('lodash'),
-  config = require('../config'),
   bunyan = require('bunyan'),
   Promise = require('bluebird'),
   exec = require('../services/execService'),
