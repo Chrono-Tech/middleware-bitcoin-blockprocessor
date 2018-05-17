@@ -7,12 +7,12 @@ module.exports = txs => {
     .map(tx =>
       _.chain(tx.inputs)
         .map((inCoin, index) => ({
-            _id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
-            inputBlock: tx.blockNumber,
-            inputTxIndex: tx.index,
-            inputIndex: index,
-            address: inCoin.address
-          })
+          _id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+          inputBlock: tx.blockNumber,
+          inputTxIndex: tx.index,
+          inputIndex: index,
+          address: inCoin.address
+        })
         )
         .filter(coin => coin.address)
         .value()
