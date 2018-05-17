@@ -8,15 +8,13 @@ const config = require('../config'),
   bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
-  TX = require('bcoin/lib/primitives/tx'),
   addBlock = require('../utils/addBlock'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   coinModel = require('../models/coinModel'),
   txAddressRelationsModel = require('../models/txAddressRelationsModel'),
+  addUnconfirmedTx = require('../utils/addUnconfirmedTx'),
   EventEmitter = require('events'),
-  Network = require('bcoin/lib/protocol/network'),
-  network = Network.get(config.node.network),
   exec = require('../services/execService'),
   getBlock = require('../utils/getBlock'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
@@ -116,7 +114,7 @@ class blockWatchingService {
   async UnconfirmedTxEvent (tx) {
     tx.index = this.lastUnconfirmedTxIndex + 1;
     this.lastUnconfirmedTxIndex++;
-    await addBlock({number: -1, txs: [tx]});
+    await addUnconfirmedTx(tx).catch((e) => log.error(e));
     this.events.emit('tx', tx);
   }
 
