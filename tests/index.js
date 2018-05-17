@@ -9,6 +9,7 @@ require('dotenv/config');
 const config = require('../config'),
   Network = require('bcoin/lib/protocol/network'),
   txModel = require('../models/txModel'),
+  coinModel = require('../models/coinModel'),
   bcoin = require('bcoin'),
   expect = require('chai').expect,
   Promise = require('bluebird'),
@@ -42,58 +43,26 @@ describe('core/blockProcessor', function () {
     return mongoose.disconnect();
   });
 
-  it('validate balance', async () => {
-    let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    let coins = await exec('getcoinsbyaddress', [keyring.getAddress().toString()]);
-
-    ctx.summ = _.chain(coins)
-      .map(c => c.value)
-      .sum()
-      .value();
-
-  });
-
   it('generate blocks and initial coins', async () => {
     let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
     let response = await exec('generatetoaddress', [10, keyring.getAddress().toString()]);
     expect(response).to.not.be.undefined;
   });
 
-  it('validate balance again', async () => {
+  it('validate balance greater 0', async () => {
+    await Promise.delay(20000);
     let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    let coins = await exec('getcoinsbyaddress', [keyring.getAddress().toString()]);
+    let coins = await coinModel.find({address: keyring.getAddress().toString()});
 
     let newSumm = _.chain(coins)
-      .map(c => c.value)
+      .map(c => parseInt(c.value))
       .sum()
       .value();
 
-    expect(newSumm).to.be.gt(ctx.summ);
+
+    expect(newSumm).to.be.gt(0);
 
   });
 
-  it('validate utxo and transactions', async () => {
-    await Promise.delay(20000);
-    const keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    const address = keyring.getAddress().toString();
-    const coins = await exec('getcoinsbyaddress', [address]);
-    const unspentTxs = await txModel.find({'outputs.address': address, 'outputs.spent': false});
-
-    let coinSumm = _.chain(coins)
-      .map(c => c.value)
-      .sum()
-      .value();
-
-    let utxoSumm = _.chain(unspentTxs)
-      .map(tx => tx.outputs)
-      .flattenDeep()
-      .filter(output => output.address === address && !output.spent)
-      .map(item => item.value)
-      .sum()
-      .value();
-
-    expect(coinSumm).to.be.eq(utxoSumm);
-
-  });
 
 });

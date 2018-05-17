@@ -61,7 +61,7 @@ module.exports = async function () {
 
   return {
     missedBuckets: missedBuckets,
-    height: currentNodeHeight - 1
+    height: currentNodeHeight === 0 ? currentNodeHeight : currentNodeHeight - 1
   };
 
 };
