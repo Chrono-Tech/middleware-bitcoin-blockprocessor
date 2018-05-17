@@ -8,12 +8,16 @@ const config = require('../config'),
   bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
-  sem = require('semaphore')(1),
-  transformBlockTxs = require('../utils/transformBlockTxs'),
+  sem = require('semaphore')(3),
+  crypto = require('crypto'),
+  exec = require('../services/execService'),
+  buildCoins = require('../utils/buildCoins'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
-  exec = require('../services/execService'),
-  log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
+  coinModel = require('../models/coinModel'),
+  buildRelations = require('../utils/buildRelations'),
+  txAddressRelationsModel = require('../models/txAddressRelationsModel'),
+  log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
 /**
  * @service
@@ -23,31 +27,23 @@ const config = require('../config'),
  * @returns {Promise.<*>}
  */
 
-const addBlock = async (block, type) => {
+const addBlock = async (block, removePending = false) => {
 
   return await new Promise((res, rej) => {
 
     sem.take(async () => {
       try {
-        type === 0 ?
-          await updateDbStateWithBlockDOWN(block) :
-          await updateDbStateWithBlockUP(block);
 
+        block.number === -1 ?
+          await updateDbStateWithUnconfirmedTxs(block).catch(()=>console.log('super')) :
+          await updateDbStateWithBlock(block, removePending);
         res();
       } catch (err) {
-        if (type === 1 && [1, 11000].includes(_.get(err, 'code'))) {
-          let lastCheckpointBlock = await blockModel.findOne({
-            number: {
-              $lte: block.number - 1,
-              $gte: block.number - 1 + config.consensus.lastBlocksValidateAmount
-            }
-          }).sort({number: -1});
-          log.info(`wrong sync state!, rollback to ${lastCheckpointBlock.number - 1} block`);
-          await rollbackStateFromBlock(lastCheckpointBlock);
-        }
-
+        log.error(err);
+        process.exit(0);
+        await rollbackStateFromBlock(block);
+        process.exit(0);
         rej(err);
-
       }
 
       sem.leave();
@@ -57,108 +53,215 @@ const addBlock = async (block, type) => {
 
 };
 
-const updateDbStateWithBlockUP = async (block) => {
+const rollbackStateFromBlock = async (block) => {
 
-  const inputs = _.chain(block.txs)
-    .map(tx => tx.inputs)
+  let txs = block.txs.map(tx => ({
+      _id: tx.hash,
+      index: tx.index,
+      blockNumber: block.number,
+      timestamp: block.time || Date.now(),
+      inputs: tx.inputs,
+      outputs: tx.outputs
+    })
+  );
+
+  const inputs = _.chain(txs)
+    .map(tx =>
+      _.chain(tx.inputs)
+        .map((inCoin, index) => ({
+            _id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+            inputBlock: block.number,
+            inputTxIndex: tx.index,
+            inputIndex: index,
+            address: inCoin.address
+          })
+        )
+        .filter(coin => coin.address)
+        .value()
+    )
     .flattenDeep()
-    .map(input => input.prevout)
     .value();
 
-  let txs = await transformBlockTxs(block.txs);
-  txs = txs.map(tx => {
-    tx.outputs = tx.outputs.map((output, index) => {
-      output.spent = !!_.find(inputs, {hash: tx.hash, index: index});
-      return output;
+  const outputs = _.chain(txs)
+    .map(tx =>
+      _.chain(tx.outputs)
+        .map((outCoin, index) => ({
+          _id: crypto.createHash('md5').update(`${index}x${tx._id}`).digest('hex'),
+          outputBlock: block.number,
+          outputTxIndex: tx.index,
+          outputIndex: index,
+          value: outCoin.value,
+          address: outCoin.address
+        }))
+        .filter(coin => coin.address)
+        .value()
+    )
+    .flattenDeep()
+    .value();
+
+  log.info('rolling back coins state');
+  if (inputs.length)
+    await Promise.mapSeries(inputs, async input => {
+      const isFullCoin = await coinModel.count({_id: input._id, outputTxIndex: {$ne: null}, inputTxIndex: {$ne: null}});
+      isFullCoin ?
+        await coinModel.update({_id: input._id}, {$set: {inputTxIndex: null, inputIndex: null, inputBlock: null}}) :
+        await coinModel.remove({_id: input._id});
     });
 
-    tx.blockNumber = block.number;
-    tx.timestamp = block.time || Date.now();
-    return tx;
-  });
+  if (outputs.length)
+    await Promise.mapSeries(outputs, async output => {
+      const isFullCoin = await coinModel.count({id: output.id, inputHash: {neq: null}});
+      isFullCoin ?
+        await coinModel.update({_id: output._id}, {
+          $set: {
+            outputTxIndex: null,
+            outputIndex: null,
+            outputBlock: null,
+            value: null
+          }
+        }) :
+        await coinModel.remove({_id: output._id});
+    });
 
-  log.info('updating utxos for block: ', block.number);
+  log.info('rolling back relations state');
+  await txAddressRelationsModel.remove({blockNumber: block.number});
 
-  await Promise.map(inputs, async input => {
-    await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: true}});
-  });
+  log.info('rolling back txs state');
+  await txModel.remove({blockNumber: block.number});
+
+  log.info('rolling back blocks state');
+  await blockModel.remove({_id: block.hash});
+};
+
+const updateDbStateWithBlock = async (block, removePending = false) => {
+
+  let txs = block.txs.map(tx => ({
+      _id: tx.hash,
+      index: tx.index,
+      blockNumber: block.number,
+      timestamp: block.time || Date.now(),
+      inputs: tx.inputs,
+      outputs: tx.outputs
+    })
+  );
+
+  const coins = buildCoins(txs);
+  const addressRelations = buildRelations(coins);
+
+  txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs']));
+
+  log.info(`inserting ${txs.length} txs`);
+  if (txs.length) {
+    let bulkOps = txs.map(tx => ({
+      updateOne: {
+        filter: {_id: tx._id},
+        update: tx,
+        upsert: true
+      }
+    }));
+
+    await txModel.bulkWrite(bulkOps);
+  }
+
+  log.info(`inserting ${coins.length} coins`);
+  if (coins.length) {
+    let bulkOps = coins.map(coin => ({
+      updateOne: {
+        filter: {_id: coin._id},
+        update: {$set: coin},
+        upsert: true
+      }
+    }));
+
+    await coinModel.bulkWrite(bulkOps);
+  }
+
+  log.info(`inserting ${addressRelations.length} relations`);
+  if (addressRelations.length) {
+    let bulkOps = addressRelations.map(relation => ({
+      updateOne: {
+        filter: {_id: relation._id},
+        update: relation,
+        upsert: true
+      }
+    }));
+
+    await txAddressRelationsModel.bulkWrite(bulkOps);
+  }
+
+  if (removePending) {
+    log.info('removing confirmed / rejected txs');
+    await removeOutDated();
+  }
+
+  if (block.hash) {
+    let blockHash = block.hash;
+    block = _.omit(block, ['txs', 'hash']);
+    block = new blockModel(block);
+    block._id = blockHash;
+    await blockModel.update({_id: blockHash}, block.toObject(), {upsert: true});
+  }
+
+};
+
+const updateDbStateWithUnconfirmedTxs = async (block) => {
+
+  let txs = block.txs.map(tx => ({
+      _id: tx.hash,
+      index: tx.index,
+      blockNumber: block.number,
+      timestamp: block.time || Date.now(),
+      inputs: tx.inputs,
+      outputs: tx.outputs
+    })
+  );
+
+  const coins = buildCoins(txs);
+  const addressRelations = buildRelations(coins);
+
+  txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs']));
+
+  log.info(`inserting unconfirmed ${txs.length} txs`);
+  if (txs.length)
+    await txModel.insertMany(txs, {ordered: false});
+
+  log.info(`inserting unconfirmed ${coins.length} coins`);
+  if (coins.length)
+    await coinModel.insertMany(coins, {ordered: false});
+
+  log.info(`inserting unconfirmed ${addressRelations.length} relations`);
+  if (addressRelations.length)
+    await txAddressRelationsModel.insertMany(addressRelations, {ordered: false});
+
+};
+
+const removeOutDated = async () => {
 
   const mempool = await exec('getrawmempool', []);
 
-  await Promise.mapSeries(_.chunk(mempool, 100), async mempoolChunk => {
-    await txModel.remove({blockNumber: -1, hash: {$nin: mempoolChunk}});
-  });
+  log.info('removing confirmed / rejected txs');
+  if (!mempool.length)
+    return;
 
-  await txModel.insertMany(txs, {ordered: false}).catch(err => {
-    if (err && err.code !== 11000)
-      return Promise.reject(err);
-  });
+  let outdatedTxs = await txModel.find({_id: {$nin: mempool}, blockNumber: -1});
 
-  block.txs = block.txs.map(tx => tx.hash);
+  if (outdatedTxs.length) {
 
-  await blockModel.update({number: block.number}, block, {upsert: true});
-
-};
-
-const rollbackStateFromBlock = async (block) => {
-
-  const blocksToDelete = await blockModel.find({
-    $or: [
-      {hash: {$lte: block.number, $gte: block.number - config.consensus.lastBlocksValidateAmount}},
-      {number: {$gte: block.number}}
-    ]
-  });
-
-  const inputs = _.chain(blocksToDelete)
-    .map(block => block.toObject().txs)
-    .flattenDeep()
-    .map(tx => tx.inputs)
-    .flattenDeep()
-    .uniqWith(_.isEqual)
-    .value();
-
-  log.info('rollback utxos from block: ', block.number);
-
-  await Promise.map(inputs, async input => {
-    await txModel.update({hash: input.hash}, {$set: {[`outputs.${input.index}.spent`]: false}});
-  });
-
-  await txModel.remove({blockNumber: {$gte: block.number}});
-  await blockModel.remove({
-    $or: [
-      {hash: {$lte: block.number, $gte: block.number - config.consensus.lastBlocksValidateAmount}},
-      {number: {$gte: block.number}}
-    ]
-  });
-};
-
-const updateDbStateWithBlockDOWN = async (block) => {
-
-  let txs = await transformBlockTxs(block.txs);
-  txs = await Promise.map(txs, async tx => {
-    tx.outputs = await Promise.mapSeries(tx.outputs, async (output, index) => {
-      output.spent = await txModel.count({
-        'inputs.prevout.hash': tx.hash,
-        'inputs.prevout.index': index
-      });
-      return output;
+    await coinModel.remove({
+      $or: _.chain(outdatedTxs).map(tx => {
+        return [
+          {outputBlock: -1, outputTxIndex: tx.index},
+          {inputBlock: -1, inputTxIndex: tx.index}
+        ]
+      }).flattenDeep().value()
     });
 
-    tx.blockNumber = block.number;
-    tx.timestamp = block.time || Date.now();
+    await txAddressRelationsModel.remove({
+      $or: outdatedTxs.map(tx => ({blockNumber: -1, txIndex: tx.index}))
+    });
 
-    return tx;
-  });
-
-  await txModel.insertMany(txs, {ordered: false}).catch(err => {
-    if (err && err.code !== 11000)
-      return Promise.reject(err);
-  });
-
-  block.txs = block.txs.map(tx => tx.hash);
-
-  await blockModel.findOneAndUpdate({number: block.number}, {$set: block}, {upsert: true});
-
+    await txModel.remove({_id: {$nin: mempool}, blockNumber: -1});
+  }
 };
 
 module.exports = addBlock;
