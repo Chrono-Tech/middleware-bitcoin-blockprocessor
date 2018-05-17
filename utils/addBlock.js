@@ -11,9 +11,11 @@ const config = require('../config'),
   sem = require('semaphore')(3),
   crypto = require('crypto'),
   exec = require('../services/execService'),
+  buildCoins = require('../utils/buildCoins'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   coinModel = require('../models/coinModel'),
+  buildRelations = require('../utils/buildRelations'),
   txAddressRelationsModel = require('../models/txAddressRelationsModel'),
   log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
@@ -25,17 +27,22 @@ const config = require('../config'),
  * @returns {Promise.<*>}
  */
 
-const addBlock = async (block) => {
+const addBlock = async (block, removePending = false) => {
 
   return await new Promise((res, rej) => {
 
     sem.take(async () => {
       try {
-        await updateDbStateWithBlock(block);
+
+        block.number === -1 ?
+          await updateDbStateWithUnconfirmedTxs(block).catch(()=>console.log('super')) :
+          await updateDbStateWithBlock(block, removePending);
         res();
       } catch (err) {
         log.error(err);
+        process.exit(0);
         await rollbackStateFromBlock(block);
+        process.exit(0);
         rej(err);
       }
 
@@ -128,8 +135,6 @@ const rollbackStateFromBlock = async (block) => {
 
 const updateDbStateWithBlock = async (block, removePending = false) => {
 
-  let start = Date.now();
-
   let txs = block.txs.map(tx => ({
       _id: tx.hash,
       index: tx.index,
@@ -140,79 +145,8 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
     })
   );
 
-  const inputs = _.chain(txs)
-    .map(tx =>
-      _.chain(tx.inputs)
-        .map((inCoin, index) => ({
-            _id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
-            inputBlock: block.number,
-            inputTxIndex: tx.index,
-            inputIndex: index,
-            address: inCoin.address
-          })
-        )
-        .filter(coin => coin.address)
-        .value()
-    )
-    .flattenDeep()
-    .value();
-
-  const outputs = _.chain(txs)
-    .map(tx =>
-      _.chain(tx.outputs)
-        .map((outCoin, index) => ({
-          _id: crypto.createHash('md5').update(`${index}x${tx._id}`).digest('hex'),
-          outputBlock: block.number,
-          outputTxIndex: tx.index,
-          outputIndex: index,
-          value: outCoin.value,
-          address: outCoin.address
-        }))
-        .filter(coin => coin.address)
-        .value()
-    )
-    .flattenDeep()
-    .value();
-
-  console.log(`took0 : ${(Date.now() - start) / 1000} s`);
-
-  let coins = _.chain(inputs).union(outputs).transform((result, coin) => {
-
-    if (!result[coin._id])
-      return result[coin._id] = coin;
-
-    _.merge(result[coin._id], coin);
-  }, {})
-    .values()
-    .value();
-
-  console.log(`took1 : ${(Date.now() - start) / 1000} s`);
-
-  const addressRelations = _.chain(coins).transform((result, coin) => {
-    let txIndex = _.isNumber(coin.inputTxIndex) ? coin.inputTxIndex : coin.outputTxIndex;
-    let id = crypto.createHash('md5').update(`${coin.address}x${block.number}x${txIndex}`).digest('hex');
-
-    if (result[id] && result[id].type === 2)
-      return;
-
-    if (result[id] && ((result[id].type === 1 && coin.inputTxIndex) || (result[id].type === 0 && coin.value))) {
-      result[id].type = 2;
-      return;
-    }
-
-    if (!result[id]) {
-      let type = coin.inputTxIndex && coin.value ? 2 : coin.inputTxIndex ? 0 : 1;
-      result[id] = {
-        address: coin.address,
-        txIndex: txIndex,
-        type: type,
-        blockNumber: block.number,
-        _id: id
-      };
-    }
-  }, [])
-    .values()
-    .value();
+  const coins = buildCoins(txs);
+  const addressRelations = buildRelations(coins);
 
   txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs']));
 
@@ -256,31 +190,8 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
   }
 
   if (removePending) {
-    const mempool = await exec('getrawmempool', []);
-
     log.info('removing confirmed / rejected txs');
-    if (!mempool.length) {
-      let outdatedTxs = await txModel.find({_id: {$nin: mempool}, blockNumber: -1});
-
-      if (outdatedTxs.length) {
-
-        await coinModel.remove({
-          $or: _.chain(outdatedTxs).map(tx => {
-            return [
-              {outputBlock: -1, outputTxIndex: tx.index},
-              {inputBlock: -1, inputTxIndex: tx.index}
-            ]
-          }).flattenDeep().value()
-        });
-
-        await txAddressRelationsModel.remove({
-          $or: outdatedTxs.map(tx => ({blockNumber: -1, txIndex: tx.index}))
-        });
-
-        await txModel.remove({_id: {$nin: mempool}, blockNumber: -1});
-
-      }
-    }
+    await removeOutDated();
   }
 
   if (block.hash) {
@@ -291,6 +202,66 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
     await blockModel.update({_id: blockHash}, block.toObject(), {upsert: true});
   }
 
+};
+
+const updateDbStateWithUnconfirmedTxs = async (block) => {
+
+  let txs = block.txs.map(tx => ({
+      _id: tx.hash,
+      index: tx.index,
+      blockNumber: block.number,
+      timestamp: block.time || Date.now(),
+      inputs: tx.inputs,
+      outputs: tx.outputs
+    })
+  );
+
+  const coins = buildCoins(txs);
+  const addressRelations = buildRelations(coins);
+
+  txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs']));
+
+  log.info(`inserting unconfirmed ${txs.length} txs`);
+  if (txs.length)
+    await txModel.insertMany(txs, {ordered: false});
+
+  log.info(`inserting unconfirmed ${coins.length} coins`);
+  if (coins.length)
+    await coinModel.insertMany(coins, {ordered: false});
+
+  log.info(`inserting unconfirmed ${addressRelations.length} relations`);
+  if (addressRelations.length)
+    await txAddressRelationsModel.insertMany(addressRelations, {ordered: false});
+
+};
+
+const removeOutDated = async () => {
+
+  const mempool = await exec('getrawmempool', []);
+
+  log.info('removing confirmed / rejected txs');
+  if (!mempool.length)
+    return;
+
+  let outdatedTxs = await txModel.find({_id: {$nin: mempool}, blockNumber: -1});
+
+  if (outdatedTxs.length) {
+
+    await coinModel.remove({
+      $or: _.chain(outdatedTxs).map(tx => {
+        return [
+          {outputBlock: -1, outputTxIndex: tx.index},
+          {inputBlock: -1, inputTxIndex: tx.index}
+        ]
+      }).flattenDeep().value()
+    });
+
+    await txAddressRelationsModel.remove({
+      $or: outdatedTxs.map(tx => ({blockNumber: -1, txIndex: tx.index}))
+    });
+
+    await txModel.remove({_id: {$nin: mempool}, blockNumber: -1});
+  }
 };
 
 module.exports = addBlock;

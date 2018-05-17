@@ -37,6 +37,7 @@ class blockWatchingService {
     this.currentHeight = currentHeight;
     this.lastBlocks = [];
     this.isSyncing = false;
+    this.lastUnconfirmedTxIndex = -1;
     this.pendingTxCallback = (topic, tx) => this.UnconfirmedTxEvent(tx);
   }
 
@@ -58,6 +59,9 @@ class blockWatchingService {
       });
       await txAddressRelationsModel.remove({blockNumber: -1});
 
+    } else {
+      let lastTx = await txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
+      this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
     }
 
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
@@ -75,6 +79,8 @@ class blockWatchingService {
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
         await addBlock(block, true);
 
+        let lastTx = await txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
+        this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
         this.currentHeight++;
         this.lastBlockHash = block.hash;
         this.events.emit('block', block);
@@ -108,11 +114,9 @@ class blockWatchingService {
   }
 
   async UnconfirmedTxEvent (tx) {
-
-    tx = TX.fromRaw(tx, 'hex').getJSON(network);
-    tx.index = await txModel.count({blockNumber: -1});
+    tx.index = this.lastUnconfirmedTxIndex + 1;
+    this.lastUnconfirmedTxIndex++;
     await addBlock({number: -1, txs: [tx]});
-
     this.events.emit('tx', tx);
   }
 
@@ -136,7 +140,7 @@ class blockWatchingService {
     if (!savedBlock && this.lastBlockHash)
       return Promise.reject({code: 1}); //head has been blown off
 
-    return getBlock(this.currentHeight);
+    return await getBlock(this.currentHeight);
   }
 
 }
