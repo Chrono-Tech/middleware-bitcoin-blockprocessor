@@ -32,10 +32,7 @@ const addBlock = async (block, removePending = false) => {
 
     sem.take(async () => {
       try {
-
-        block.number === -1 ?
-          await updateDbStateWithUnconfirmedTxs(block).catch(() => null) :
-          await updateDbStateWithBlock(block, removePending);
+        await updateDbStateWithBlock(block, removePending);
         res();
       } catch (err) {
         log.error(err);
@@ -53,25 +50,25 @@ const addBlock = async (block, removePending = false) => {
 const rollbackStateFromBlock = async (block) => {
 
   let txs = block.txs.map(tx => ({
-    _id: tx.hash,
-    index: tx.index,
-    blockNumber: block.number,
-    timestamp: block.time || Date.now(),
-    inputs: tx.inputs,
-    outputs: tx.outputs
-  })
+      _id: tx.hash,
+      index: tx.index,
+      blockNumber: block.number,
+      timestamp: block.time || Date.now(),
+      inputs: tx.inputs,
+      outputs: tx.outputs
+    })
   );
 
   const inputs = _.chain(txs)
     .map(tx =>
       _.chain(tx.inputs)
         .map((inCoin, index) => ({
-          _id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
-          inputBlock: block.number,
-          inputTxIndex: tx.index,
-          inputIndex: index,
-          address: inCoin.address
-        })
+            _id: crypto.createHash('md5').update(`${inCoin.prevout.index}x${inCoin.prevout.hash}`).digest('hex'),
+            inputBlock: block.number,
+            inputTxIndex: tx.index,
+            inputIndex: index,
+            address: inCoin.address
+          })
         )
         .filter(coin => coin.address)
         .value()
@@ -133,13 +130,13 @@ const rollbackStateFromBlock = async (block) => {
 const updateDbStateWithBlock = async (block, removePending = false) => {
 
   let txs = block.txs.map(tx => ({
-    _id: tx.hash,
-    index: tx.index,
-    blockNumber: block.number,
-    timestamp: block.time || Date.now(),
-    inputs: tx.inputs,
-    outputs: tx.outputs
-  })
+      _id: tx.hash,
+      index: tx.index,
+      blockNumber: block.number,
+      timestamp: block.time || Date.now(),
+      inputs: tx.inputs,
+      outputs: tx.outputs
+    })
   );
 
   const coins = buildCoins(txs);
@@ -198,37 +195,6 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
     block._id = blockHash;
     await blockModel.update({_id: blockHash}, block.toObject(), {upsert: true});
   }
-
-};
-
-const updateDbStateWithUnconfirmedTxs = async (block) => {
-
-  let txs = block.txs.map(tx => ({
-    _id: tx.hash,
-    index: tx.index,
-    blockNumber: block.number,
-    timestamp: block.time || Date.now(),
-    inputs: tx.inputs,
-    outputs: tx.outputs
-  })
-  );
-
-  const coins = buildCoins(txs);
-  const addressRelations = buildRelations(coins);
-
-  txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs']));
-
-  log.info(`inserting unconfirmed ${txs.length} txs`);
-  if (txs.length)
-    await txModel.insertMany(txs, {ordered: false});
-
-  log.info(`inserting unconfirmed ${coins.length} coins`);
-  if (coins.length)
-    await coinModel.insertMany(coins, {ordered: false});
-
-  log.info(`inserting unconfirmed ${addressRelations.length} relations`);
-  if (addressRelations.length)
-    await txAddressRelationsModel.insertMany(addressRelations, {ordered: false});
 
 };
 
