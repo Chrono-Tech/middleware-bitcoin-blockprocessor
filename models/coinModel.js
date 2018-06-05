@@ -13,6 +13,8 @@
 const mongoose = require('mongoose'),
   config = require('../config');
 
+require('mongoose-long')(mongoose);
+
 const Coin = new mongoose.Schema({
   _id: {type: String},
   outputBlock: {type: Number},
@@ -21,7 +23,7 @@ const Coin = new mongoose.Schema({
   inputBlock: {type: Number},
   inputTxIndex: {type: Number},
   inputIndex: {type: Number},
-  value: {type: String},
+  value: {type: mongoose.Schema.Types.Long},
   address: {type: String}
 }, {_id: false});
 
