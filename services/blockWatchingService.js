@@ -33,7 +33,6 @@ class blockWatchingService {
     this.sock = sock;
     this.events = new EventEmitter();
     this.currentHeight = currentHeight;
-    this.lastBlocks = [];
     this.isSyncing = false;
     this.lastUnconfirmedTxIndex = -1;
     this.pendingTxCallback = (topic, tx) => this.UnconfirmedTxEvent(tx);
@@ -99,7 +98,7 @@ class blockWatchingService {
           const currentBlock = await blockModel.find({
             number: {$gte: 0}
           }).sort({number: -1}).limit(2);
-          this.lastBlockHash = _.get(currentBlock, '1.hash');
+          this.lastBlockHash = _.get(currentBlock, '1._id');
           this.currentHeight = _.get(currentBlock, '0.number', 0);
           continue;
         }
