@@ -14,8 +14,6 @@ const bunyan = require('bunyan'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   coinModel = require('../models/coinModel'),
-  buildRelations = require('../utils/buildRelations'),
-  txAddressRelationsModel = require('../models/txAddressRelationsModel'),
   log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
 /**
@@ -117,8 +115,6 @@ const rollbackStateFromBlock = async (block) => {
         await coinModel.remove({_id: output._id});
     });
 
-  log.info('rolling back relations state');
-  await txAddressRelationsModel.remove({blockNumber: block.number});
 
   log.info('rolling back txs state');
   await txModel.remove({blockNumber: block.number});
@@ -140,7 +136,6 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
   );
 
   const coins = buildCoins(txs);
-  const addressRelations = buildRelations(coins);
 
   txs = txs.map(tx => _.omit(tx, ['inputs', 'outputs']));
 
@@ -168,19 +163,6 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
     }));
 
     await coinModel.bulkWrite(bulkOps);
-  }
-
-  log.info(`inserting ${addressRelations.length} relations`);
-  if (addressRelations.length) {
-    let bulkOps = addressRelations.map(relation => ({
-      updateOne: {
-        filter: {_id: relation._id},
-        update: relation,
-        upsert: true
-      }
-    }));
-
-    await txAddressRelationsModel.bulkWrite(bulkOps);
   }
 
   if (removePending) {
@@ -217,10 +199,6 @@ const removeOutDated = async () => {
           {inputBlock: -1, inputTxIndex: tx.index}
         ];
       }).flattenDeep().value()
-    });
-
-    await txAddressRelationsModel.remove({
-      $or: outdatedTxs.map(tx => ({blockNumber: -1, txIndex: tx.index}))
     });
 
     await txModel.remove({_id: {$nin: mempool}, blockNumber: -1});

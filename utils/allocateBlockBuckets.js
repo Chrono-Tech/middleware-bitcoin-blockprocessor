@@ -55,7 +55,7 @@ module.exports = async function () {
   if (currentNodeHeight === -1)
     return Promise.reject({code: 0});
 
-  let missedBuckets = await blockValidator(0, currentNodeHeight - 2, 10000); //todo remove -1000
+  let missedBuckets = await blockValidator(0, currentNodeHeight - 2, 10000);
   missedBuckets = _.chain(missedBuckets).sortBy(item => item[0]).reverse().value();
 
   return {
