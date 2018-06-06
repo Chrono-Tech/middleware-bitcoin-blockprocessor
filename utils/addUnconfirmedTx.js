@@ -9,15 +9,12 @@ const bunyan = require('bunyan'),
   buildCoins = require('../utils/buildCoins'),
   txModel = require('../models/txModel'),
   coinModel = require('../models/coinModel'),
-  buildRelations = require('../utils/buildRelations'),
-  txAddressRelationsModel = require('../models/txAddressRelationsModel'),
   log = bunyan.createLogger({name: 'app.utils.addUnconfirmedTx'});
 
 /**
  * @service
  * @description filter txs by registered addresses
- * @param block - prepared block with full txs
- * @param type - type of arrived block (is block from cache or it's the last block)
+ * @param tx - unconfirmed transaction
  * @returns {Promise.<*>}
  */
 
@@ -33,7 +30,6 @@ module.exports = async (tx) => {
   };
 
   const coins = buildCoins([tx]);
-  const addressRelations = buildRelations(coins);
 
   tx = _.omit(tx, ['inputs', 'outputs']);
 
@@ -43,9 +39,5 @@ module.exports = async (tx) => {
   log.info(`inserting unconfirmed ${coins.length} coins`);
   if (coins.length)
     await coinModel.insertMany(coins, {ordered: false});
-
-  log.info(`inserting unconfirmed ${addressRelations.length} relations`);
-  if (addressRelations.length)
-    await txAddressRelationsModel.insertMany(addressRelations, {ordered: false});
 
 };

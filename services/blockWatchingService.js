@@ -12,7 +12,6 @@ const config = require('../config'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   coinModel = require('../models/coinModel'),
-  txAddressRelationsModel = require('../models/txAddressRelationsModel'),
   addUnconfirmedTx = require('../utils/addUnconfirmedTx'),
   EventEmitter = require('events'),
   exec = require('../services/execService'),
@@ -54,7 +53,6 @@ class blockWatchingService {
           {outputBlock: -1}
         ]
       });
-      await txAddressRelationsModel.remove({blockNumber: -1});
 
     } else {
       let lastTx = await txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
