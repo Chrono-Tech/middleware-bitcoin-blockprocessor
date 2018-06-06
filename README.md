@@ -164,27 +164,6 @@ Here is the description:
 Beside just storing coins, we also are able to restore transaction's inputs and outputs from these coins.
 
 
-##### bitcointxaddressrelations
-The bitcointxaddressrelations collection is used to store the relation between addresses. The relation points to address on certain transaction. For instance, it can tell, how did certain address participated in transaction (did he sent the money, received, or made transfer / partial transfer to himself).
-```
-    "_id" : "c2a425909be0233d1e4b45da76d3381d",
-    "address" : "2MuWbVXTtcKxE6WGfy6NiDTcarxhRUeavWS",
-    "blockNumber" : 1297963,
-    "txIndex" : 4,
-    "type" : 2
-```
-
-Here is the description:
-
-| field name | index | description|
-| ------ | ------ | ------ |
-| _id   | true | the unique id of relation (it's md5 checsum).
-| address   | true | the recepient/sender address
-| blockNumber   | true | the blocknumber, where tx has been included
-| txIndex   | true | the index of transaction
-| type   | false | the type of relation: 0 - the address has been found in inputs, 1 - in outputs, 2 - address has been mentioned everywhere.
-
-
 ### ipc node
 
 For the moment, block processor has the ipc / http interface support. In case you wish to run the node and work with it by ipc, thwn you need to run a full bcoin node with ipc support. You can grab it [here](https://github.com/ChronoBank/bcoin-ipc-node).
