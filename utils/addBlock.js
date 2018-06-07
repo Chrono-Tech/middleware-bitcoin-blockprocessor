@@ -9,7 +9,7 @@ const bunyan = require('bunyan'),
   Promise = require('bluebird'),
   sem = require('semaphore')(3),
   crypto = require('crypto'),
-  exec = require('../services/execService'),
+  removeOldUnconfirmedTxs = require('../utils/removeOldUnconfirmedTxs'),
   buildCoins = require('../utils/buildCoins'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
@@ -94,9 +94,19 @@ const rollbackStateFromBlock = async (block) => {
   log.info('rolling back coins state');
   if (inputs.length)
     await Promise.mapSeries(inputs, async input => {
-      const isFullCoin = await coinModel.count({_id: input._id, outputTxIndex: {$ne: null}, inputTxIndex: {$ne: null}});
+      const isFullCoin = await coinModel.count({
+        _id: input._id,
+        outputTxIndex: {$ne: null},
+        inputTxIndex: {$ne: null}
+      });
       isFullCoin ?
-        await coinModel.update({_id: input._id}, {$set: {inputTxIndex: null, inputIndex: null, inputBlock: null}}) :
+        await coinModel.update({_id: input._id}, {
+          $set: {
+            inputTxIndex: null,
+            inputIndex: null,
+            inputBlock: null
+          }
+        }) :
         await coinModel.remove({_id: input._id});
     });
 
@@ -167,7 +177,7 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
 
   if (removePending) {
     log.info('removing confirmed / rejected txs');
-    await removeOutDated();
+    await removeOldUnconfirmedTxs();
   }
 
   if (block.hash) {
@@ -178,31 +188,6 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
     await blockModel.update({_id: blockHash}, block.toObject(), {upsert: true});
   }
 
-};
-
-const removeOutDated = async () => {
-
-  const mempool = await exec('getrawmempool', []);
-
-  log.info('removing confirmed / rejected txs');
-  if (!mempool.length)
-    return;
-
-  let outdatedTxs = await txModel.find({_id: {$nin: mempool}, blockNumber: -1});
-
-  if (outdatedTxs.length) {
-
-    await coinModel.remove({
-      $or: _.chain(outdatedTxs).map(tx => {
-        return [
-          {outputBlock: -1, outputTxIndex: tx.index},
-          {inputBlock: -1, inputTxIndex: tx.index}
-        ];
-      }).flattenDeep().value()
-    });
-
-    await txModel.remove({_id: {$nin: mempool}, blockNumber: -1});
-  }
 };
 
 module.exports = addBlock;
