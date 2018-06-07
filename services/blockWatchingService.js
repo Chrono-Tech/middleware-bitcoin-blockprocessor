@@ -12,7 +12,11 @@ const config = require('../config'),
   blockModel = require('../models/blockModel'),
   txModel = require('../models/txModel'),
   coinModel = require('../models/coinModel'),
+  TxModel = require('bcoin/lib/primitives/tx'),
+  Network = require('bcoin/lib/protocol/network'),
+  network = Network.get(config.node.network),
   addUnconfirmedTx = require('../utils/addUnconfirmedTx'),
+  removeOldUnconfirmedTxs = require('../utils/removeOldUnconfirmedTxs'),
   EventEmitter = require('events'),
   exec = require('../services/execService'),
   getBlock = require('../utils/getBlock'),
@@ -27,7 +31,7 @@ const config = require('../config'),
 
 class blockWatchingService {
 
-  constructor (sock, currentHeight) {
+  constructor(sock, currentHeight) {
 
     this.sock = sock;
     this.events = new EventEmitter();
@@ -37,7 +41,7 @@ class blockWatchingService {
     this.pendingTxCallback = (topic, tx) => this.UnconfirmedTxEvent(tx);
   }
 
-  async startSync () {
+  async startSync() {
 
     if (this.isSyncing)
       return;
@@ -46,14 +50,7 @@ class blockWatchingService {
 
     const mempool = await exec('getrawmempool', []);
     if (!mempool.length) {
-      await txModel.remove({blockNumber: -1});
-      await coinModel.remove({
-        $or: [
-          {inputBlock: -1},
-          {outputBlock: -1}
-        ]
-      });
-
+      await removeOldUnconfirmedTxs();
     } else {
       let lastTx = await txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
       this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
@@ -65,7 +62,7 @@ class blockWatchingService {
     this.sock.on('message', this.pendingTxCallback);
   }
 
-  async doJob () {
+  async doJob() {
 
     while (this.isSyncing) {
 
@@ -108,19 +105,22 @@ class blockWatchingService {
 
   }
 
-  async UnconfirmedTxEvent (tx) {
+  async UnconfirmedTxEvent(tx) {
+
+    tx = TxModel.fromRaw(tx, 'hex').getJSON(network);
+
     tx.index = this.lastUnconfirmedTxIndex + 1;
     this.lastUnconfirmedTxIndex++;
     await addUnconfirmedTx(tx).catch((e) => log.error(e));
     this.events.emit('tx', tx);
   }
 
-  async stopSync () {
+  async stopSync() {
     this.isSyncing = false;
     this.node.pool.removeListener('tx', this.pendingTxCallback);
   }
 
-  async processBlock () {
+  async processBlock() {
 
     let hash = await exec('getblockhash', [this.currentHeight]).catch(err =>
       err.code && err.code === -32600 ? null : Promise.reject(err)

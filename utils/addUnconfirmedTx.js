@@ -33,11 +33,20 @@ module.exports = async (tx) => {
 
   tx = _.omit(tx, ['inputs', 'outputs']);
 
-  log.info('inserting unconfirmed tx');
-  await txModel.insertMany([tx]);
+  log.info(`inserting unconfirmed tx ${tx._id}`);
+  await txModel.create(tx);
 
   log.info(`inserting unconfirmed ${coins.length} coins`);
-  if (coins.length)
-    await coinModel.insertMany(coins, {ordered: false});
+  if (coins.length) {
+    let bulkOps = coins.map(coin => ({
+      updateOne: {
+        filter: {_id: coin._id},
+        update: {$set: coin},
+        upsert: true
+      }
+    }));
+
+    await coinModel.bulkWrite(bulkOps);
+  }
 
 };
