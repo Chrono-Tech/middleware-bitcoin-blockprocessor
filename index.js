@@ -6,23 +6,19 @@
 
 const mongoose = require('mongoose'),
   config = require('./config'),
+  models = require('./models'),
+  MasterNodeService = require('middleware-common-components/services/blockProcessor/MasterNodeService'),
   customNetworkRegistrator = require('./networks'),
   Promise = require('bluebird');
 
 customNetworkRegistrator(config.node.network);
 
-mongoose.Promise = Promise;
-mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
-mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
-
 const filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   amqp = require('amqplib'),
   bunyan = require('bunyan'),
-  zmq = require('zeromq'),
   _ = require('lodash'),
   BlockWatchingService = require('./services/blockWatchingService'),
   SyncCacheService = require('./services/syncCacheService'),
-  sock = zmq.socket('sub'),
   log = bunyan.createLogger({name: 'core.blockProcessor'});
 
 /**
@@ -31,47 +27,39 @@ const filterTxsByAccountsService = require('./services/filterTxsByAccountsServic
  * services about new block or tx, where we meet registered address
  */
 
-sock.monitor(500, 0);
-sock.connect(config.node.zmq);
-sock.subscribe('rawtx');
 
-sock.on('close', () => {
-  log.error('zmq disconnected!');
-  process.exit(0);
-});
+mongoose.Promise = Promise;
+mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
+mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
 
-
-[mongoose.accounts, mongoose.connection].forEach(connection =>
-  connection.on('disconnected', function () {
-    log.error('mongo disconnected!');
-    process.exit(0);
-  })
-);
 
 const init = async function () {
 
-  let amqpConn = await amqp.connect(config.rabbit.url)
-    .catch(() => {
-      log.error('rabbitmq is not available!');
-      process.exit(0);
-    });
+  [mongoose.accounts, mongoose.connection].forEach(connection =>
+    connection.on('disconnected', () => {
+      throw new Error('mongo disconnected!');
+    })
+  );
 
-  let channel = await amqpConn.createChannel();
+  models.init();
+
+
+  let amqpInstance = await amqp.connect(config.rabbit.url);
+
+  let channel = await amqpInstance.createChannel();
 
   channel.on('close', () => {
-    log.error('rabbitmq process has finished!');
-    process.exit(0);
+    throw new Error('rabbitmq process has finished!');
   });
 
-  try {
-    await channel.assertExchange('events', 'topic', {durable: false});
-  } catch (e) {
-    log.error(e);
-    channel = await amqpConn.createChannel();
-  }
+
+  await channel.assertExchange('events', 'topic', {durable: false});
+
+  const masterNodeService = new MasterNodeService(channel, config.rabbit.serviceName);
+  await masterNodeService.start();
+
 
   const syncCacheService = new SyncCacheService();
-
 
   syncCacheService.events.on('block', async block => {
     log.info(`${block.hash} (${block.number}) added to cache.`);
@@ -90,6 +78,8 @@ const init = async function () {
       }
       log.error(err);
     });
+
+  process.exit(0);
 
   await new Promise((res) => {
     if (config.sync.shadow)
@@ -126,4 +116,7 @@ const init = async function () {
 
 };
 
-module.exports = init();
+module.exports = init().catch(err => {
+  log.error(err);
+  process.exit(0);
+});

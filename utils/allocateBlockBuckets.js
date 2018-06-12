@@ -7,9 +7,10 @@
 const _ = require('lodash'),
   bunyan = require('bunyan'),
   Promise = require('bluebird'),
-  exec = require('../services/execService'),
-  log = bunyan.createLogger({name: 'app.utils.allocateBlockBuckets'}),
-  blockModel = require('../models/blockModel');
+  //exec = require('../services/execService'),
+  models = require('../models'),
+  providerService = require('../services/providerService'),
+  log = bunyan.createLogger({name: 'app.utils.allocateBlockBuckets'});
 
 const blockValidator = async (minBlock, maxBlock, chunkSize) => {
 
@@ -26,7 +27,7 @@ const blockValidator = async (minBlock, maxBlock, chunkSize) => {
       const maxBlock = _.last(chunk);
       log.info(`validating blocks from: ${minBlock} to ${maxBlock}`);
 
-      const count = await blockModel.count(minBlock === maxBlock ? {number: minBlock} : {
+      const count = await models.blockModel.count(minBlock === maxBlock ? {number: minBlock} : {
         $and: [
           {number: {$gte: minBlock}},
           {number: {$lte: maxBlock}}
@@ -50,7 +51,9 @@ const blockValidator = async (minBlock, maxBlock, chunkSize) => {
 
 module.exports = async function () {
 
-  let currentNodeHeight = await Promise.resolve(exec('getblockcount', [])).timeout(10000).catch(() => -1);
+  let provider = await providerService.get();
+
+  let currentNodeHeight = await Promise.resolve(provider.instance.execute('getblockcount', [])).timeout(10000).catch(() => -1);
 
   if (currentNodeHeight === -1)
     return Promise.reject({code: 0});

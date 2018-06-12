@@ -10,8 +10,7 @@ const bunyan = require('bunyan'),
   EventEmitter = require('events'),
   exec = require('../services/execService'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
-  blockModel = require('../models/blockModel'),
-  txModel = require('../models/txModel'),
+  models = require('../models'),
   getBlock = require('../utils/getBlock'),
   addBlock = require('../utils/addBlock'),
   log = bunyan.createLogger({name: 'app.services.syncCacheService'});
@@ -38,8 +37,9 @@ class SyncCacheService {
 
   async indexCollection () {
     log.info('indexing...');
-    await blockModel.init();
-    await txModel.init();
+    await models.blockModel.init();
+    await models.txModel.init();
+    await models.coinModel.init();
     log.info('indexation completed!');
   }
 

@@ -6,7 +6,7 @@
 
 const mongoose = require('mongoose'),
   config = require('../config'),
-  messages = require('../factories/messages/addressMessageFactory');
+  messages = require('middleware-common-components/factories/messages/addressMessageFactory');
 
 /** @model accountModel
  *  @description account model - represents an bitcoin account

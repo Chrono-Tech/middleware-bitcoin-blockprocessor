@@ -5,6 +5,7 @@
  */
 
 require('dotenv').config();
+const _ = require('lodash');
 
 /**
  * @factory config

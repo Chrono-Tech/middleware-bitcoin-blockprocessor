@@ -15,7 +15,7 @@ const bunyan = require('bunyan'),
   providerServiceInterface = require('middleware-common-components/interfaces/blockProcessor/providerServiceInterface'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
-  log = bunyan.createLogger({name: 'app.services.syncCacheService'});
+  log = bunyan.createLogger({name: 'app.services.providerService'});
 
 /**
  * @service
@@ -43,27 +43,26 @@ class providerService {
   }
 
 
-  static getConnectorFromURI(providerURI) {
+  getConnectorFromURI(providerURI) {
     const isHttpProvider = new RegExp(/(http|https):\/\//).test(providerURI);
     return isHttpProvider ? httpExec : new ipcExec(providerURI); //todo replace http provider
   }
 
   async switchConnector() {
 
-
-    let providerURIByZMQ = await Promise.mapSeries(config.node.providers.map(async providerURI => {
+    let providerURIByZMQ = await Promise.mapSeries(config.node.providers, async providerURI => {
       sock.connect(providerURI.zmq);
       try {
         await Promise.resolve((res, rej) =>
           sock.on('connected', (err) => err ? rej() : res())
         ).timeout(1000);
 
-        sock.disconnect();
+        sock.disconnect(providerURI.zmq);
         return providerURI;
       } catch (e) {
         return null;
       }
-    }));
+    });
 
     providerURIByZMQ = _.compact(providerURIByZMQ);
 
@@ -87,7 +86,7 @@ class providerService {
       return;
 
     this.connector = {
-      instance: this.getConnectorFromURI(providerURI),
+      instance: this.getConnectorFromURI(providerURI.uri),
       currentProvider: providerURI
     };
 
