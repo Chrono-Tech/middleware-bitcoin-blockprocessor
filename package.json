@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
+    "middleware-common-components": "github:ChronoBank/middleware-common-components",
     "amqplib": "^0.5.1",
     "bcoin": "^1.0.0-beta.15",
     "bluebird": "^3.5.0",

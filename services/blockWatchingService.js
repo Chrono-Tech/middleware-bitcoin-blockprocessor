@@ -9,9 +9,7 @@ const config = require('../config'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   addBlock = require('../utils/addBlock'),
-  blockModel = require('../models/blockModel'),
-  txModel = require('../models/txModel'),
-  coinModel = require('../models/coinModel'),
+  models = require('../models'),
   TxModel = require('bcoin/lib/primitives/tx'),
   Network = require('bcoin/lib/protocol/network'),
   network = Network.get(config.node.network),
@@ -52,7 +50,7 @@ class blockWatchingService {
     if (!mempool.length) {
       await removeOldUnconfirmedTxs();
     } else {
-      let lastTx = await txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
+      let lastTx = await models.txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
       this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
     }
 
@@ -71,7 +69,7 @@ class blockWatchingService {
         let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
         await addBlock(block, true);
 
-        let lastTx = await txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
+        let lastTx = await models.txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
         this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
         this.currentHeight++;
         this.lastBlockHash = block.hash;
@@ -90,7 +88,7 @@ class blockWatchingService {
         }
 
         if (_.get(err, 'code') === 1) {
-          const currentBlock = await blockModel.find({
+          const currentBlock = await models.blockModel.find({
             number: {$gte: 0}
           }).sort({number: -1}).limit(2);
           this.lastBlockHash = _.get(currentBlock, '1._id');
@@ -130,7 +128,7 @@ class blockWatchingService {
       return Promise.reject({code: 0});
 
     const lastBlockHash = this.currentHeight === 0 ? null : await exec('getblockhash', [this.currentHeight - 1]);
-    let savedBlock = await blockModel.count({_id: lastBlockHash});
+    let savedBlock = await models.blockModel.count({_id: lastBlockHash});
 
     if (!savedBlock && this.lastBlockHash)
       return Promise.reject({code: 1}); //head has been blown off

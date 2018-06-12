@@ -28,6 +28,28 @@ require('dotenv').config();
  *  }}
  */
 
+const getDefault = () => {
+  return (
+    (process.env.CONNECTION_URI || `${process.env.IPC_PATH || '/tmp/'}${process.env.IPC_NAME || 'bitcoin'}`) + '@' +
+    (process.env.ZMQ || 'tcp://127.0.0.1:43332')
+  );
+};
+
+const createConfigProviders = (providers) => {
+  return _.chain(providers)
+    .split(',')
+    .map(provider => {
+      const data = provider.split('@');
+      return {
+        uri: data[0].trim(),
+        zmq: data[1].trim()
+      };
+    })
+    .value();
+};
+
+
+
 module.exports = {
   mongo: {
     accounts: {
@@ -39,9 +61,6 @@ module.exports = {
       collectionPrefix: process.env.MONGO_DATA_COLLECTION_PREFIX || process.env.MONGO_COLLECTION_PREFIX || 'bitcoin'
     }
   },
-  consensus: {
-    lastBlocksValidateAmount: parseInt(process.env.CONSENSUS_BLOCK_VALIDATE_AMOUNT) || 6
-  },
   rabbit: {
     url: process.env.RABBIT_URI || 'amqp://localhost:5672',
     serviceName: process.env.RABBIT_SERVICE_NAME || 'app_bitcoin'
@@ -50,11 +69,8 @@ module.exports = {
     shadow: parseInt(process.env.SYNC_SHADOW) || true
   },
   node: {
-    zmq: process.env.ZMQ || 'tcp://127.0.0.1:43332',
+    //zmq: process.env.ZMQ || 'tcp://127.0.0.1:43332',
     network: process.env.NETWORK || 'regtest',
-    connectionURI: process.env.CONNECTION_URI || `${process.env.IPC_PATH || '/tmp/'}${process.env.IPC_NAME || 'bitcoin'}`,
-    user: process.env.NODE_USER_NAME,
-    password: process.env.NODE_USER_PASSWORD
-
+    providers: createConfigProviders(process.env.PROVIDERS || getDefault())
   }
 };

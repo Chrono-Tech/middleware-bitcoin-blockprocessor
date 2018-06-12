@@ -5,55 +5,70 @@
  */
 
 const Promise = require('bluebird'),
-  config = require('../config'),
   path = require('path'),
+  EventEmitter = require('events'),
   uniqid = require('uniqid'),
   ipc = require('node-ipc');
 
-const callbacks = {};
 
-const ipcInstance = new ipc.IPC;
+class IPCExec {
 
-const ipcPath = path.parse(config.node.connectionURI);
-
-Object.assign(ipcInstance.config, {
-  id: uniqid(),
-  socketRoot: `${ipcPath.dir}/`,
-  retry: 1500,
-  sync: false,
-  silent: true,
-  unlink: true
-});
-
-ipcInstance.connectTo(ipcPath.base);
-
-ipcInstance.of[ipcPath.base].on('message', async data => {
-  if (!data.error) {
-    callbacks[data.id](null, data.result);
-    delete callbacks[data.id];
-    return;
+  constructor(providerURI) {
+    this.callbacks = {};
+    this.events = new EventEmitter();
+    this.ipcInstance = new ipc.IPC;
+    this.ipcPath = path.parse(providerURI);
+    Object.assign(this.ipcInstance.config, {
+      id: uniqid(),
+      socketRoot: `${this.ipcPath.dir}/`,
+      retry: 1500,
+      sync: false,
+      silent: true,
+      unlink: true
+    });
+    this.connect();
   }
 
-  callbacks[data.id](data.error);
-  delete callbacks[data.id];
-});
 
-ipcInstance.of[ipcPath.base].on('error', async err => {
-  for (let key of Object.keys(callbacks)) {
-    callbacks[key](err);
-    delete callbacks[key];
+  connect() {
+    this.ipcInstance.connectTo(this.ipcPath.base);
+
+    this.ipcInstance.of[this.ipcPath.base].on('disconnect', ()=>{
+      this.events.emit('disconnected');
+    });
+
+    this.ipcInstance.of[this.ipcPath.base].on('message', async data => {
+      if (!data.error) {
+        this.callbacks[data.id](null, data.result);
+        delete this.callbacks[data.id];
+        return;
+      }
+
+      this.callbacks[data.id](data.error);
+      delete this.callbacks[data.id];
+    });
+
+    this.ipcInstance.of[this.ipcPath.base].on('error', async err => {
+      for (let key of Object.keys(this.callbacks)) {
+        this.callbacks[key](err);
+        delete this.callbacks[key];
+      }
+    });
   }
-});
 
-module.exports = async (method, params) => {
-  return new Promise((res, rej) => {
-    const requestId = uniqid();
-    callbacks[requestId] = (err, result) => err ? rej(err) : res(result);
+  async execute(method, params) {
+    return new Promise((res, rej) => {
+      const requestId = uniqid();
+      this.callbacks[requestId] = (err, result) => err ? rej(err) : res(result);
 
-    ipcInstance.of[ipcPath.base].emit('message', JSON.stringify({
-      method: method,
-      params: params,
-      id: requestId
-    }));
-  });
-};
+      this.ipcInstance.of[this.ipcPath.base].emit('message', JSON.stringify({
+        method: method,
+        params: params,
+        id: requestId
+      }));
+    });
+
+  }
+}
+
+module.exports = IPCExec;
