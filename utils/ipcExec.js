@@ -21,7 +21,7 @@ class IPCExec {
     Object.assign(this.ipcInstance.config, {
       id: uniqid(),
       socketRoot: `${this.ipcPath.dir}/`,
-      retry: 1500,
+      stopRetrying: true,
       sync: false,
       silent: true,
       unlink: true
@@ -33,8 +33,8 @@ class IPCExec {
   connect() {
     this.ipcInstance.connectTo(this.ipcPath.base);
 
-    this.ipcInstance.of[this.ipcPath.base].on('disconnect', ()=>{
-      this.events.emit('disconnected');
+    this.ipcInstance.of[this.ipcPath.base].on('disconnect', () => {
+      this.events.emit('disconnect');
     });
 
     this.ipcInstance.of[this.ipcPath.base].on('message', async data => {
@@ -56,7 +56,12 @@ class IPCExec {
     });
   }
 
+  disconnect() {
+    this.ipcInstance.disconnect(this.ipcPath.base);
+  }
+
   async execute(method, params) {
+
     return new Promise((res, rej) => {
       const requestId = uniqid();
       this.callbacks[requestId] = (err, result) => err ? rej(err) : res(result);
@@ -67,8 +72,8 @@ class IPCExec {
         id: requestId
       }));
     });
-
   }
+
 }
 
 module.exports = IPCExec;

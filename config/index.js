@@ -70,7 +70,6 @@ module.exports = {
     shadow: parseInt(process.env.SYNC_SHADOW) || true
   },
   node: {
-    //zmq: process.env.ZMQ || 'tcp://127.0.0.1:43332',
     network: process.env.NETWORK || 'regtest',
     providers: createConfigProviders(process.env.PROVIDERS || getDefault())
   }

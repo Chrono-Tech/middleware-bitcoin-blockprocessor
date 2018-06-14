@@ -8,11 +8,11 @@ const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
-  exec = require('../services/execService'),
   allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
   models = require('../models'),
   getBlock = require('../utils/getBlock'),
   addBlock = require('../utils/addBlock'),
+  providerService = require('../services/providerService'),
   log = bunyan.createLogger({name: 'app.services.syncCacheService'});
 
 /**
@@ -69,7 +69,9 @@ class SyncCacheService {
 
   async runPeer (bucket) {
 
-    let lastBlock = await exec('getblockhash', [_.last(bucket)]).catch(() => null);
+    const provider = await providerService.get();
+
+    let lastBlock = await provider.instance.execute('getblockhash', [_.last(bucket)]).catch(() => null);
 
     if (!lastBlock)
       return await Promise.delay(10000);

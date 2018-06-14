@@ -9,7 +9,6 @@ const bunyan = require('bunyan'),
   config = require('../config'),
   sem = require('semaphore')(1),
   zmq = require('zeromq'),
-  sock = zmq.socket('sub'),
   httpExec = require('../utils/httpExec'),
   ipcExec = require('../utils/ipcExec'),
   providerServiceInterface = require('middleware-common-components/interfaces/blockProcessor/providerServiceInterface'),
@@ -37,8 +36,12 @@ class providerService {
   }
 
   async resetConnector() {
-    await this.connector.reset();
-    this.switchConnector();
+    try {
+      this.connector.zmq.disconnect(this.connector.currentProvider.zmq);
+    } catch (e) {
+    }
+    this.connector.instance.disconnect();
+    this.switchConnectorSafe();
     this.events.emit('disconnected');
   }
 
@@ -50,30 +53,19 @@ class providerService {
 
   async switchConnector() {
 
-    let providerURIByZMQ = await Promise.mapSeries(config.node.providers, async providerURI => {
+    const providerURI = await Promise.any(config.node.providers.map(async providerURI => {
+
+      const sock = zmq.socket('sub');
       sock.connect(providerURI.zmq);
-      try {
-        await Promise.resolve((res, rej) =>
-          sock.on('connected', (err) => err ? rej() : res())
-        ).timeout(1000);
 
-        sock.disconnect(providerURI.zmq);
-        return providerURI;
-      } catch (e) {
-        return null;
-      }
-    });
+      await Promise.resolve((res, rej) =>
+        sock.on('connected', (err) => err ? rej() : res())
+      ).timeout(1000);
+      sock.disconnect(providerURI.zmq);
 
-    providerURIByZMQ = _.compact(providerURIByZMQ);
-
-    if (!providerURIByZMQ.length) {
-      log.error('no available connection!');
-      process.exit(0);
-    }
-
-    const providerURI = await Promise.any(providerURIByZMQ.map(async providerURI => {
       const instance = this.getConnectorFromURI(providerURI.uri);
       await instance.execute('getblockcount', []);
+      instance.disconnect();
       return providerURI;
     })).catch(() => {
       log.error('no available connection!');
@@ -82,18 +74,20 @@ class providerService {
 
     const currentProviderURI = this.connector ? this.connector.currentProvider.uri : '';
 
-    if (currentProviderURI === providerURI.uri)
-      return;
+    if (currentProviderURI === providerURI.uri) {
+      return this.connector;
+    }
 
     this.connector = {
       instance: this.getConnectorFromURI(providerURI.uri),
-      currentProvider: providerURI
+      currentProvider: providerURI,
+      zmq: zmq.socket('sub')
     };
 
-    sock.monitor(500, 0);
-    sock.connect(providerURI.zmq);
-    sock.subscribe('rawtx');
-    sock.on('close', () => this.resetConnector());
+    this.connector.zmq.monitor(500, 0);
+    this.connector.zmq.connect(providerURI.zmq);
+    this.connector.zmq.subscribe('rawtx');
+    this.connector.zmq.on('close', () => this.resetConnector());
 
     if (_.get(this.connector.instance, 'events')) {
       this.connector.instance.events.on('disconnect', () => this.resetConnector());
@@ -115,13 +109,12 @@ class providerService {
         }
       }, 5000);
 
-    sock.on('message', result =>
-      this.events.emit('unconfirmedTx', result)
+    this.connector.zmq.on('message', (topic, tx) =>
+      this.events.emit('unconfirmedTx', tx)
     );
 
 
     return this.connector;
-
   }
 
   async switchConnectorSafe() {
@@ -136,7 +129,7 @@ class providerService {
   }
 
   async get() {
-    return this.connector && this.connector.isConnected() ? this.connector : await this.switchConnectorSafe();
+    return this.connector || await this.switchConnectorSafe();
   }
 
 }

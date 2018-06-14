@@ -70,16 +70,7 @@ const init = async function () {
     ));
   });
 
-  let endBlock = await syncCacheService.start()
-    .catch((err) => {
-      if (_.get(err, 'code') === 0) {
-        log.info('nodes are down or not synced!');
-        process.exit(0);
-      }
-      log.error(err);
-    });
-
-  process.exit(0);
+  let endBlock = await syncCacheService.start();
 
   await new Promise((res) => {
     if (config.sync.shadow)
@@ -91,12 +82,8 @@ const init = async function () {
     });
   });
 
-  const blockWatchingService = new BlockWatchingService(sock, endBlock);
-
-  await blockWatchingService.startSync().catch(e => {
-    log.error(`error starting cache service: ${e}`);
-    process.exit(0);
-  });
+  const blockWatchingService = new BlockWatchingService(endBlock);
+  await blockWatchingService.startSync();
 
   blockWatchingService.events.on('block', async block => {
     log.info(`${block.hash} (${block.number}) added to cache.`);
@@ -117,6 +104,10 @@ const init = async function () {
 };
 
 module.exports = init().catch(err => {
-  log.error(err);
+  if (_.get(err, 'code') === 0) {
+    log.info('nodes are down or not synced!');
+  } else {
+    log.error(err);
+  }
   process.exit(0);
 });

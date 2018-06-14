@@ -11,9 +11,7 @@ const bunyan = require('bunyan'),
   crypto = require('crypto'),
   removeOldUnconfirmedTxs = require('../utils/removeOldUnconfirmedTxs'),
   buildCoins = require('../utils/buildCoins'),
-  blockModel = require('../models/blockModel'),
-  txModel = require('../models/txModel'),
-  coinModel = require('../models/coinModel'),
+  models = require('../models'),
   log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
 /**
@@ -94,27 +92,27 @@ const rollbackStateFromBlock = async (block) => {
   log.info('rolling back coins state');
   if (inputs.length)
     await Promise.mapSeries(inputs, async input => {
-      const isFullCoin = await coinModel.count({
+      const isFullCoin = await models.coinModel.count({
         _id: input._id,
         outputTxIndex: {$ne: null},
         inputTxIndex: {$ne: null}
       });
       isFullCoin ?
-        await coinModel.update({_id: input._id}, {
+        await models.coinModel.update({_id: input._id}, {
           $set: {
             inputTxIndex: null,
             inputIndex: null,
             inputBlock: null
           }
         }) :
-        await coinModel.remove({_id: input._id});
+        await models.coinModel.remove({_id: input._id});
     });
 
   if (outputs.length)
     await Promise.mapSeries(outputs, async output => {
-      const isFullCoin = await coinModel.count({id: output.id, inputHash: {neq: null}});
+      const isFullCoin = await models.coinModel.count({id: output.id, inputHash: {neq: null}});
       isFullCoin ?
-        await coinModel.update({_id: output._id}, {
+        await models.coinModel.update({_id: output._id}, {
           $set: {
             outputTxIndex: null,
             outputIndex: null,
@@ -122,15 +120,15 @@ const rollbackStateFromBlock = async (block) => {
             value: null
           }
         }) :
-        await coinModel.remove({_id: output._id});
+        await models.coinModel.remove({_id: output._id});
     });
 
 
   log.info('rolling back txs state');
-  await txModel.remove({blockNumber: block.number});
+  await models.txModel.remove({blockNumber: block.number});
 
   log.info('rolling back blocks state');
-  await blockModel.remove({_id: block.hash});
+  await models.blockModel.remove({_id: block.hash});
 };
 
 const updateDbStateWithBlock = async (block, removePending = false) => {
@@ -159,7 +157,7 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
       }
     }));
 
-    await txModel.bulkWrite(bulkOps);
+    await models.txModel.bulkWrite(bulkOps);
   }
 
   log.info(`inserting ${coins.length} coins`);
@@ -172,7 +170,7 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
       }
     }));
 
-    await coinModel.bulkWrite(bulkOps);
+    await models.coinModel.bulkWrite(bulkOps);
   }
 
   if (removePending) {
@@ -183,9 +181,9 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
   if (block.hash) {
     let blockHash = block.hash;
     block = _.omit(block, ['txs', 'hash']);
-    block = new blockModel(block);
+    block = new models.blockModel(block);
     block._id = blockHash;
-    await blockModel.update({_id: blockHash}, block.toObject(), {upsert: true});
+    await models.blockModel.update({_id: blockHash}, block.toObject(), {upsert: true});
   }
 
 };

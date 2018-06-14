@@ -5,9 +5,9 @@
  */
 
 const config = require('../config'),
-  exec = require('../services/execService'),
   Network = require('bcoin/lib/protocol/network'),
   network = Network.get(config.node.network),
+  providerService = require('../services/providerService'),
   BlockModel = require('bcoin/lib/primitives/block');
 
 module.exports = async (blockNumber) => {
@@ -16,8 +16,11 @@ module.exports = async (blockNumber) => {
    * Get raw block
    * @type {Object}
    */
-  let hash = await exec('getblockhash', [blockNumber]);
-  let blockRaw = await exec('getblock', [hash, false]);
+
+  const provider = await providerService.get();
+
+  let hash = await provider.instance.execute('getblockhash', [blockNumber]);
+  let blockRaw = await provider.instance.execute('getblock', [hash, false]);
   let block = BlockModel.fromRaw(blockRaw, 'hex').getJSON(network);
 
   return {
