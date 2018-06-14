@@ -6,8 +6,8 @@
 
 const bunyan = require('bunyan'),
   _ = require('lodash'),
-  buildCoins = require('../utils/buildCoins'),
-  models = require('../models'),
+  buildCoins = require('../../utils/coins/buildCoins'),
+  models = require('../../models'),
   log = bunyan.createLogger({name: 'app.utils.addUnconfirmedTx'});
 
 /**

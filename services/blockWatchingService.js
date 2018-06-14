@@ -8,16 +8,16 @@ const config = require('../config'),
   bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
-  addBlock = require('../utils/addBlock'),
+  addBlock = require('../utils/blocks/addBlock'),
   models = require('../models'),
   TxModel = require('bcoin/lib/primitives/tx'),
   Network = require('bcoin/lib/protocol/network'),
   network = Network.get(config.node.network),
   providerService = require('../services/providerService'),
-  addUnconfirmedTx = require('../utils/addUnconfirmedTx'),
-  removeOldUnconfirmedTxs = require('../utils/removeOldUnconfirmedTxs'),
+  addUnconfirmedTx = require('../utils/txs/addUnconfirmedTx'),
+  removeUnconfirmedTxs = require('../utils/txs/removeUnconfirmedTxs'),
   EventEmitter = require('events'),
-  getBlock = require('../utils/getBlock'),
+  getBlock = require('../utils/blocks/getBlock'),
   log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
 
 /**
@@ -46,7 +46,7 @@ class blockWatchingService {
 
     const mempool = await provider.instance.execute('getrawmempool', []);
     if (!mempool.length) {
-      await removeOldUnconfirmedTxs();
+      await removeUnconfirmedTxs();
     } else {
       let lastTx = await models.txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
       this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
@@ -92,8 +92,6 @@ class blockWatchingService {
           continue;
         }
 
-        await Promise.delay(5000);
-       //setTimeout(()=>process.exit(0), 500); //todo remove
         if (![0, 1, 2, -32600].includes(_.get(err, 'code')))
           log.error(err);
       }

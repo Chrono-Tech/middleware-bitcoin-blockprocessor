@@ -9,16 +9,16 @@ const bunyan = require('bunyan'),
   Promise = require('bluebird'),
   sem = require('semaphore')(3),
   crypto = require('crypto'),
-  removeOldUnconfirmedTxs = require('../utils/removeOldUnconfirmedTxs'),
-  buildCoins = require('../utils/buildCoins'),
-  models = require('../models'),
+  providerService = require('../../services/providerService'),
+  buildCoins = require('../../utils/coins/buildCoins'),
+  models = require('../../models'),
   log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
 /**
  * @service
  * @description filter txs by registered addresses
  * @param block - prepared block with full txs
- * @param type - type of arrived block (is block from cache or it's the last block)
+ * @param removePending - remove pending transactions
  * @returns {Promise.<*>}
  */
 
@@ -175,7 +175,7 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
 
   if (removePending) {
     log.info('removing confirmed / rejected txs');
-    await removeOldUnconfirmedTxs();
+    await removeOutDated();
   }
 
   if (block.hash) {
@@ -185,6 +185,46 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
     block._id = blockHash;
     await models.blockModel.update({_id: blockHash}, block.toObject(), {upsert: true});
   }
+
+};
+
+const removeOutDated = async () => {
+
+  const provider = await providerService.get();
+  const mempool = await provider.instance.execute('getrawmempool', []);
+
+  log.info('removing confirmed / rejected txs');
+  if (!mempool.length)
+    return;
+
+  let outdatedTxs = await models.txModel.find({_id: {$nin: mempool}, blockNumber: -1});
+
+  if (!outdatedTxs.length)
+    return;
+
+
+  let bulkOps = outdatedTxs.map(tx => ({
+    updateOne: {
+      filter: {inputBlock: -1, inputTxIndex: tx.index}
+    },
+    update: {
+      $unset: {inputBlock: 1, inputTxIndex: 1, inputIndex: 1},
+      upsert: true
+    }
+  }));
+
+  await models.coinModel.bulkWrite(bulkOps);
+
+
+  await models.coinModel.remove({
+    $or: outdatedTxs.map(tx => ({
+        outputBlock: -1,
+        outputTxIndex: tx.index
+      })
+    )
+  });
+
+  await models.txModel.remove({_id: {$nin: mempool}, blockNumber: -1});
 
 };
 

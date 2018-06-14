@@ -4,10 +4,10 @@
  * @author Egor Zuev <zyev.egor@gmail.com>
  */
 
-const config = require('../config'),
+const config = require('../../config'),
   Network = require('bcoin/lib/protocol/network'),
   network = Network.get(config.node.network),
-  providerService = require('../services/providerService'),
+  providerService = require('../../services/providerService'),
   BlockModel = require('bcoin/lib/primitives/block');
 
 module.exports = async (blockNumber) => {

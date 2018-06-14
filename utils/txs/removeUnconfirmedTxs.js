@@ -1,6 +1,6 @@
 const bunyan = require('bunyan'),
-  providerService = require('../services/providerService'),
-  models = require('../models'),
+  providerService = require('../../services/providerService'),
+  models = require('../../models'),
   log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
 

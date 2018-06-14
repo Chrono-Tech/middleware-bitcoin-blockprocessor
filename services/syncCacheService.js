@@ -8,10 +8,10 @@ const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
-  allocateBlockBuckets = require('../utils/allocateBlockBuckets'),
+  allocateBlockBuckets = require('../utils/blocks/allocateBlockBuckets'),
   models = require('../models'),
-  getBlock = require('../utils/getBlock'),
-  addBlock = require('../utils/addBlock'),
+  getBlock = require('../utils/blocks/getBlock'),
+  addBlock = require('../utils/blocks/addBlock'),
   providerService = require('../services/providerService'),
   log = bunyan.createLogger({name: 'app.services.syncCacheService'});
 
