@@ -1,19 +1,20 @@
 const bunyan = require('bunyan'),
-  exec = require('../services/execService'),
-  txModel = require('../models/txModel'),
-  coinModel = require('../models/coinModel'),
+  providerService = require('../../services/providerService'),
+  models = require('../../models'),
   log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
 
 module.exports = async () => {
 
-  const mempool = await exec('getrawmempool', []);
+  const provider = await providerService.get();
+
+  const mempool = await provider.instance.execute('getrawmempool', []);
 
   log.info('removing confirmed / rejected txs');
   if (!mempool.length)
     return;
 
-  let outdatedTxs = await txModel.find({_id: {$nin: mempool}, blockNumber: -1});
+  let outdatedTxs = await models.txModel.find({_id: {$nin: mempool}, blockNumber: -1});
 
   if (!outdatedTxs.length)
     return;
@@ -29,10 +30,10 @@ module.exports = async () => {
     }
   }));
 
-  await coinModel.bulkWrite(bulkOps);
+  await models.coinModel.bulkWrite(bulkOps);
 
 
-  await coinModel.remove({
+  await models.coinModel.remove({
     $or: outdatedTxs.map(tx => ({
       outputBlock: -1,
       outputTxIndex: tx.index
@@ -40,6 +41,6 @@ module.exports = async () => {
     )
   });
 
-  await txModel.remove({_id: {$nin: mempool}, blockNumber: -1});
+  await models.txModel.remove({_id: {$nin: mempool}, blockNumber: -1});
 
 };
