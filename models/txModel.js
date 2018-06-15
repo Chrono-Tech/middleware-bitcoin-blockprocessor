@@ -24,4 +24,5 @@ const TX = new mongoose.Schema({
 TX.index({blockNumber: 1, index: 1});
 
 
-module.exports = mongoose.model(`${config.mongo.data.collectionPrefix}TX`, TX);
+module.exports = ()=>
+  mongoose.model(`${config.mongo.data.collectionPrefix}TX`, TX);
