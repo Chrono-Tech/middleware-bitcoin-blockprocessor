@@ -8,12 +8,11 @@ require('dotenv/config');
 
 const config = require('../config'),
   Network = require('bcoin/lib/protocol/network'),
-  txModel = require('../models/txModel'),
-  coinModel = require('../models/coinModel'),
+  models = require('../models'),
   bcoin = require('bcoin'),
   expect = require('chai').expect,
   Promise = require('bluebird'),
-  exec = require('../services/execService'),
+  providerService = require('../services/providerService'),
   _ = require('lodash'),
   ctx = {
     network: null,
@@ -22,6 +21,9 @@ const config = require('../config'),
   mongoose = require('mongoose');
 
 mongoose.Promise = Promise;
+mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
+mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
+
 
 describe('core/blockProcessor', function () {
 
@@ -36,7 +38,7 @@ describe('core/blockProcessor', function () {
 
     ctx.accounts.push(keyPair, keyPair2, keyPair3, keyPair4);
 
-    mongoose.connect(config.mongo.accounts.uri, {useMongoClient: true});
+    models.init();
   });
 
   after(() => {
@@ -45,14 +47,15 @@ describe('core/blockProcessor', function () {
 
   it('generate blocks and initial coins', async () => {
     let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    let response = await exec('generatetoaddress', [10, keyring.getAddress().toString()]);
+    const provider = await providerService.get();
+    let response = await provider.instance.execute('generatetoaddress', [10, keyring.getAddress().toString()]);
     expect(response).to.not.be.undefined;
   });
 
   it('validate balance greater 0', async () => {
     await Promise.delay(20000);
     let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    let coins = await coinModel.find({address: keyring.getAddress().toString()});
+    let coins = await models.coinModel.find({address: keyring.getAddress().toString()});
 
     let newSumm = _.chain(coins)
       .map(c => parseInt(c.value))
