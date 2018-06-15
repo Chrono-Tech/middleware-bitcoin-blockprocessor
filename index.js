@@ -61,14 +61,24 @@ const init = async function () {
 
   const syncCacheService = new SyncCacheService();
 
-  syncCacheService.events.on('block', async block => {
+  let blockEventCallback = async block => {
     log.info(`${block.hash} (${block.number}) added to cache.`);
     await channel.publish('events', `${config.rabbit.serviceName}_block`, new Buffer(JSON.stringify({block: block.number})));
     let filtered = await filterTxsByAccountsService(block.txs);
     await Promise.all(filtered.map(item =>
       channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: block.number}))))
     ));
-  });
+  };
+
+  let txEventCallback = async tx => {
+    let filtered = await filterTxsByAccountsService([tx]);
+    await Promise.all(filtered.map(item =>
+      channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
+    ));
+  };
+
+
+  syncCacheService.events.on('block', blockEventCallback);
 
   let endBlock = await syncCacheService.start();
 
@@ -83,23 +93,11 @@ const init = async function () {
   });
 
   const blockWatchingService = new BlockWatchingService(endBlock);
+
+  blockWatchingService.events.on('block', blockEventCallback);
+  blockWatchingService.events.on('tx', txEventCallback);
+
   await blockWatchingService.startSync();
-
-  blockWatchingService.events.on('block', async block => {
-    log.info(`${block.hash} (${block.number}) added to cache.`);
-    await channel.publish('events', `${config.rabbit.serviceName}_block`, new Buffer(JSON.stringify({block: block.number})));
-    let filtered = await filterTxsByAccountsService(block.txs);
-    await Promise.all(filtered.map(item =>
-      channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: block.number}))))
-    ));
-  });
-
-  blockWatchingService.events.on('tx', async (tx) => {
-    let filtered = await filterTxsByAccountsService([tx]);
-    await Promise.all(filtered.map(item =>
-      channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
-    ));
-  });
 
 };
 
