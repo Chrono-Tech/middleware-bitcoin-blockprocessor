@@ -6,9 +6,8 @@
 
 const bunyan = require('bunyan'),
   _ = require('lodash'),
-  buildCoins = require('../utils/buildCoins'),
-  txModel = require('../models/txModel'),
-  coinModel = require('../models/coinModel'),
+  buildCoins = require('../../utils/coins/buildCoins'),
+  models = require('../../models'),
   log = bunyan.createLogger({name: 'app.utils.addUnconfirmedTx'});
 
 /**
@@ -34,7 +33,7 @@ module.exports = async (tx) => {
   tx = _.omit(tx, ['inputs', 'outputs']);
 
   log.info(`inserting unconfirmed tx ${tx._id}`);
-  await txModel.create(tx);
+  await models.txModel.create(tx);
 
   log.info(`inserting unconfirmed ${coins.length} coins`);
   if (coins.length) {
@@ -46,7 +45,7 @@ module.exports = async (tx) => {
       }
     }));
 
-    await coinModel.bulkWrite(bulkOps);
+    await models.coinModel.bulkWrite(bulkOps);
   }
 
 };
