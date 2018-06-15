@@ -60,6 +60,10 @@ class IPCExec {
     this.ipcInstance.disconnect(this.ipcPath.base);
   }
 
+  connected (){
+    return !!this.ipcInstance.of[this.ipcPath.base];
+  }
+
   async execute(method, params) {
 
     return new Promise((res, rej) => {

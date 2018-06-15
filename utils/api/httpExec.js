@@ -1,29 +1,41 @@
 const request = require('request-promise'),
-  uniqid = require('uniqid'),
-  config = require('../../config');
+  uniqid = require('uniqid');
 
-module.exports = async (method, params) => {
 
-  const requestBody = {
-    uri: config.node.connectionURI,
-    method: 'POST',
-    json: {
-      method: method,
-      params: params,
-      id: uniqid()
-    }
-  };
+class HTTPExec {
 
-  if (config.node.user)
-    requestBody.auth = {
-      user: config.node.user,
-      pass: config.node.password
+  constructor(providerURI) {
+    this.httpPath = providerURI;
+    this._isConnected = true;
+  }
+
+  async execute(method, params) {
+
+    const requestBody = {
+      uri: this.httpPath,
+      method: 'POST',
+      json: {
+        method: method,
+        params: params,
+        id: uniqid()
+      }
     };
 
-  const data = await request(requestBody).catch(() => ({error: {code: 'ECONNECT'}}));
 
-  if(data.error)
-    return Promise.reject(data.error);
+    try {
+      const data = await request(requestBody);
+      return data.result;
+    }catch (e) {
+      this._isConnected = false;
+      return Promise.reject(e);
+    }
 
-  return data.result;
-};
+  }
+
+  connected(){
+    return this._isConnected;
+  }
+
+}
+
+module.exports = HTTPExec;

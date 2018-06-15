@@ -92,6 +92,7 @@ class blockWatchingService {
           continue;
         }
 
+        await Promise.delay(5000);
         if (![0, 1, 2, -32600].includes(_.get(err, 'code')))
           log.error(err);
       }

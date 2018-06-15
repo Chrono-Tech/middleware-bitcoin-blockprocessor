@@ -40,7 +40,8 @@ class providerService {
       this.connector.zmq.disconnect(this.connector.currentProvider.zmq);
     } catch (e) {
     }
-    this.connector.instance.disconnect();
+    if (this.connector.instance.disconnect)
+      this.connector.instance.disconnect();
     this.switchConnectorSafe();
     this.events.emit('disconnected');
   }
@@ -48,7 +49,7 @@ class providerService {
 
   getConnectorFromURI(providerURI) {
     const isHttpProvider = new RegExp(/(http|https):\/\//).test(providerURI);
-    return isHttpProvider ? httpExec : new ipcExec(providerURI); //todo replace http provider
+    return isHttpProvider ? new httpExec(providerURI) : new ipcExec(providerURI); //todo replace http provider
   }
 
   async switchConnector() {
@@ -65,7 +66,8 @@ class providerService {
 
       const instance = this.getConnectorFromURI(providerURI.uri);
       await instance.execute('getblockcount', []);
-      instance.disconnect();
+      if (instance.disconnect)
+        instance.disconnect();
       return providerURI;
     })).catch(() => {
       log.error('no available connection!');
@@ -74,7 +76,7 @@ class providerService {
 
     const currentProviderURI = this.connector ? this.connector.currentProvider.uri : '';
 
-    if (currentProviderURI === providerURI.uri) {
+    if (currentProviderURI === providerURI.uri && this.connector.instance.connected()) {
       return this.connector;
     }
 
@@ -94,16 +96,9 @@ class providerService {
     } else
       this.pingIntervalId = setInterval(async () => {
 
-        const isConnected = await new Promise((res, rej) => {
-          this.connector.currentProvider.sendAsync({ //todo replace with httpexec
-            id: 9999999999,
-            jsonrpc: '2.0',
-            method: 'net_listening',
-            params: []
-          }, (err, result) => err ? rej(err) : res(result.result));
-        });
+        const blockCount = await this.connector.instance.execute('getblockcount', []).catch(() => false);
 
-        if (!isConnected) {
+        if (blockCount === false) {
           clearInterval(this.pingIntervalId);
           this.resetConnector();
         }
