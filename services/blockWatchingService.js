@@ -51,13 +51,19 @@ class BlockWatchingService {
     } else {
       let lastTx = await models.txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
       this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
+
+      await Promise.mapSeries(mempool, async txHash => {
+        const tx = await provider.instance.execute('getrawtransaction', [txHash, false]);
+        await this.unconfirmedTxEvent(tx).catch(()=>{});
+      });
     }
 
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
     this.lastBlockHash = null;
     this.doJob();
 
-    this.unconfirmedTxEventCallback = result=> this.unconfirmedTxEvent(result).catch(()=>{});
+    this.unconfirmedTxEventCallback = result => this.unconfirmedTxEvent(result).catch(() => {
+    });
     providerService.events.on('unconfirmedTx', this.unconfirmedTxEventCallback);
 
   }

@@ -49,7 +49,7 @@ class providerService {
 
   getConnectorFromURI(providerURI) {
     const isHttpProvider = new RegExp(/(http|https):\/\//).test(providerURI);
-    return isHttpProvider ? new httpExec(providerURI) : new ipcExec(providerURI); //todo replace http provider
+    return isHttpProvider ? new httpExec(providerURI) : new ipcExec(providerURI);
   }
 
   async switchConnector() {
