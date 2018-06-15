@@ -15,6 +15,7 @@ const config = require('../config'),
   network = Network.get(config.node.network),
   providerService = require('../services/providerService'),
   addUnconfirmedTx = require('../utils/txs/addUnconfirmedTx'),
+  blockWatchingInterface = require('middleware-common-components/interfaces/blockProcessor/blockWatchingServiceInterface'),
   removeUnconfirmedTxs = require('../utils/txs/removeUnconfirmedTxs'),
   EventEmitter = require('events'),
   getBlock = require('../utils/blocks/getBlock'),
@@ -27,7 +28,7 @@ const config = require('../config'),
  * @returns {Promise.<*>}
  */
 
-class blockWatchingService {
+class BlockWatchingService {
 
   constructor(currentHeight) {
     this.events = new EventEmitter();
@@ -135,4 +136,6 @@ class blockWatchingService {
 
 }
 
-module.exports = blockWatchingService;
+module.exports = function (...args) {
+  return blockWatchingInterface(new BlockWatchingService(...args));
+};

@@ -8,6 +8,7 @@ const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
+  syncCacheServiceInterface = require('middleware-common-components/interfaces/blockProcessor/syncCacheServiceInterface'),
   allocateBlockBuckets = require('../utils/blocks/allocateBlockBuckets'),
   models = require('../models'),
   getBlock = require('../utils/blocks/getBlock'),
@@ -92,4 +93,6 @@ class SyncCacheService {
   }
 }
 
-module.exports = SyncCacheService;
+module.exports = function (...args) {
+  return syncCacheServiceInterface(new SyncCacheService(...args));
+};
