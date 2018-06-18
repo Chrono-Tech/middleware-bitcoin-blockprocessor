@@ -97,7 +97,7 @@ const init = async function () {
   blockWatchingService.events.on('block', blockEventCallback);
   blockWatchingService.events.on('tx', txEventCallback);
 
-  await blockWatchingService.startSync();
+  await blockWatchingService.startSync(endBlock);
 
 };
 
