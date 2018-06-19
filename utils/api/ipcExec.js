@@ -10,6 +10,11 @@ const Promise = require('bluebird'),
   uniqid = require('uniqid'),
   ipc = require('node-ipc');
 
+/**
+ * @service
+ * @param providerURI - the endpoint URI
+ * @description http provider for bitcoin node
+ */
 
 class IPCExec {
 
@@ -29,6 +34,10 @@ class IPCExec {
     this.connect();
   }
 
+  /**
+   * @function
+   * @description establish the connection with node
+   */
 
   connect() {
     this.ipcInstance.connectTo(this.ipcPath.base);
@@ -56,14 +65,31 @@ class IPCExec {
     });
   }
 
+  /**
+   * @function
+   * @description disconnects the connection
+   */
   disconnect() {
     this.ipcInstance.disconnect(this.ipcPath.base);
   }
 
-  connected (){
+  /**
+   * @function
+   * @description is connection active
+   * @return {boolean}
+   */
+  connected() {
     return !!this.ipcInstance.of[this.ipcPath.base];
   }
 
+
+  /**
+   * @function
+   * @description execute the request
+   * @param method - the rpc method
+   * @param params - the params for the method
+   * @return {Promise<*>}
+   */
   async execute(method, params) {
 
     return new Promise((res, rej) => {

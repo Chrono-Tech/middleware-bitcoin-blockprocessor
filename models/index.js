@@ -4,15 +4,22 @@ const requireAll = require('require-all'),
     filter: /(.+Model)\.js$/
   });
 
-const init = () => {
+/** @function
+ * @description prepare (init) the mongoose models
+ *
+ */
 
+const init = () => {
   for (let modelName of Object.keys(models))
     ctx[modelName] = models[modelName]();
-
 };
 
 const ctx = {
   init: init
 };
+
+/** @factory
+ * @return {{init: init, ...Models}}
+ */
 
 module.exports = ctx;

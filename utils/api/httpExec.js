@@ -1,6 +1,11 @@
 const request = require('request-promise'),
   uniqid = require('uniqid');
 
+/**
+ * @service
+ * @param providerURI - the endpoint URI
+ * @description http provider for bitcoin node
+ */
 
 class HTTPExec {
 
@@ -9,6 +14,13 @@ class HTTPExec {
     this._isConnected = true;
   }
 
+  /**
+   * @function
+   * @description execute the request
+   * @param method - the rpc method
+   * @param params - the params for the method
+   * @return {Promise<*>}
+   */
   async execute(method, params) {
 
     const requestBody = {
@@ -25,14 +37,19 @@ class HTTPExec {
     try {
       const data = await request(requestBody);
       return data.result;
-    }catch (e) {
+    } catch (e) {
       this._isConnected = false;
       return Promise.reject(e);
     }
 
   }
 
-  connected(){
+  /**
+   * @function
+   * @description is connection active
+   * @return {boolean}
+   */
+  connected() {
     return this._isConnected;
   }
 

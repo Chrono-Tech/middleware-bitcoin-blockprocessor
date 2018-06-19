@@ -1,6 +1,12 @@
 const _ = require('lodash'),
   crypto = require('crypto');
 
+/**
+ * @function
+ * @description extract coins from transaction
+ * @param txs - the prepared transactions
+ * @returns Array<CoinModel>
+ */
 module.exports = txs => {
 
   const inputs = _.chain(txs)

@@ -18,12 +18,11 @@ const bunyan = require('bunyan'),
 
 /**
  * @service
- * @description filter txs by registered addresses
- * @param block - an array of txs
- * @returns {Promise.<*>}
+ * @description the service for handling connection to node
+ * @returns Object<ProviderService>
  */
 
-class providerService {
+class ProviderService {
 
   constructor() {
     this.events = new EventEmitter();
@@ -35,6 +34,11 @@ class providerService {
       }, 60000 * 5);
   }
 
+
+  /** @function
+   * @description reset the current connection
+   * @return {Promise<void>}
+   */
   async resetConnector() {
     try {
       this.connector.zmq.disconnect(this.connector.currentProvider.zmq);
@@ -46,12 +50,22 @@ class providerService {
     this.events.emit('disconnected');
   }
 
+  /**@function
+   * @description build the connector from the URI
+   * @param providerURI - the URI endpoint
+   * @return Object<HttpExec|IpcExec>
+   */
 
   getConnectorFromURI(providerURI) {
     const isHttpProvider = new RegExp(/(http|https):\/\//).test(providerURI);
     return isHttpProvider ? new httpExec(providerURI) : new ipcExec(providerURI);
   }
 
+  /**
+   * @function
+   * @description choose the connector
+   * @return {Promise<null|*>}
+   */
   async switchConnector() {
 
     const providerURI = await Promise.any(config.node.providers.map(async providerURI => {
@@ -112,6 +126,11 @@ class providerService {
     return this.connector;
   }
 
+  /**
+   * @function
+   * @description safe connector switching, by moving requests to
+   * @return {Promise<bluebird>}
+   */
   async switchConnectorSafe() {
 
     return new Promise(res => {
@@ -123,10 +142,15 @@ class providerService {
     });
   }
 
+  /**
+   * @function
+   * @description
+   * @return {Promise<*|bluebird>}
+   */
   async get() {
     return this.connector || await this.switchConnectorSafe();
   }
 
 }
 
-module.exports = providerServiceInterface(new providerService());
+module.exports = providerServiceInterface(new ProviderService());
