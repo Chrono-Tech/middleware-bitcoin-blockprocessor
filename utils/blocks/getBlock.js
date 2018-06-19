@@ -10,12 +10,13 @@ const config = require('../../config'),
   providerService = require('../../services/providerService'),
   BlockModel = require('bcoin/lib/primitives/block');
 
+/**
+ * @function
+ * @description get block from the node
+ * @param blockNumber
+ * @return {Promise<{number: *, hash: *, txs: *, timestamp: *, bits: *, merkleRoot: *}>}
+ */
 module.exports = async (blockNumber) => {
-
-  /**
-   * Get raw block
-   * @type {Object}
-   */
 
   const provider = await providerService.get();
 
