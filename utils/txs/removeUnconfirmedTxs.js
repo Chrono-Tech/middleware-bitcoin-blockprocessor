@@ -3,7 +3,11 @@ const bunyan = require('bunyan'),
   models = require('../../models'),
   log = bunyan.createLogger({name: 'app.utils.addBlock'});
 
-
+/**
+ * @function
+ * @description remove unconfirmed transactions, which has been pulled from mempool
+ * @return {Promise<void>}
+ */
 module.exports = async () => {
 
   const provider = await providerService.get();
@@ -22,11 +26,8 @@ module.exports = async () => {
 
   let bulkOps = outdatedTxs.map(tx => ({
     updateOne: {
-      filter: {inputBlock: -1, inputTxIndex: tx.index}
-    },
-    update: {
-      $unset: {inputBlock: 1, inputTxIndex: 1, inputIndex: 1},
-      upsert: true
+      filter: {inputBlock: -1, inputTxIndex: tx.index},
+      update: {$unset: {inputBlock: 1, inputTxIndex: 1, inputIndex: 1}}
     }
   }));
 

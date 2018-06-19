@@ -23,9 +23,9 @@ const config = require('../config'),
 
 /**
  * @service
- * @description filter txs by registered addresses
- * @param block - an array of txs
- * @returns {Promise.<*>}
+ * @description the service is watching for the recent blocks and transactions (including unconfirmed)
+ * @param currentHeight - the current blockchain's height
+ * @returns Object<BlockWatchingService>
  */
 
 class BlockWatchingService {
@@ -36,6 +36,11 @@ class BlockWatchingService {
     this.isSyncing = false;
     this.lastUnconfirmedTxIndex = -1;
   }
+
+  /**function
+   * @description start sync process
+   * @return {Promise<void>}
+   */
 
   async startSync() {
 
@@ -68,6 +73,11 @@ class BlockWatchingService {
 
   }
 
+  /**
+   * @function
+   * start block watching
+   * @return {Promise<void>}
+   */
   async doJob() {
 
     while (this.isSyncing) {
@@ -99,7 +109,6 @@ class BlockWatchingService {
           continue;
         }
 
-        await Promise.delay(5000);
         if (![0, 1, 2, -32600].includes(_.get(err, 'code')))
           log.error(err);
       }
@@ -107,6 +116,12 @@ class BlockWatchingService {
 
   }
 
+  /**
+   * @function
+   * @description process unconfirmed tx
+   * @param tx - the encoded raw transaction
+   * @return {Promise<void>}
+   */
   async unconfirmedTxEvent(tx) {
     tx = TxModel.fromRaw(tx, 'hex').getJSON(network);
     tx.index = this.lastUnconfirmedTxIndex + 1;
@@ -115,11 +130,21 @@ class BlockWatchingService {
     this.events.emit('tx', tx);
   }
 
+  /**
+   * @function
+   * @description stop the sync process
+   * @return {Promise<void>}
+   */
   async stopSync() {
     this.isSyncing = false;
     this.node.pool.removeListener('tx', this.pendingTxCallback);
   }
 
+  /**
+   * @function
+   * @description process the next block from the current height
+   * @return {Promise<*>}
+   */
   async processBlock() {
 
     const provider = await providerService.get();

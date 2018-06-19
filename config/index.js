@@ -7,26 +7,10 @@
 require('dotenv').config();
 const _ = require('lodash');
 
-/**
- * @factory config
- * @description base app's configuration
- * @returns {{
- *  mongo: {
- *    uri: string,
- *    collectionPrefix: string
- *    },
- *  rabbit: {
- *    url: string,
- *    serviceName: string
- *    },
- *  node: {
- *    dbpath: string,
- *    network: string,
- *    dbDriver: string,
- *    ipcName: string,
- *    ipcPath: string
- *    }
- *  }}
+
+/** @function
+ * @description build default connection URI
+ * @returns {string}
  */
 
 const getDefault = () => {
@@ -35,6 +19,13 @@ const getDefault = () => {
     (process.env.ZMQ || 'tcp://127.0.0.1:43332')
   );
 };
+
+/**
+ * @function
+ * @description return the array of providers
+ * @param providers - the string of providers
+ * @returns Array<{uri: String, zmq: String}>
+ */
 
 const createConfigProviders = (providers) => {
   return _.chain(providers)
@@ -50,6 +41,24 @@ const createConfigProviders = (providers) => {
 };
 
 
+/**
+ * @factory config
+ * @description base app's configuration
+ * @returns {{
+ *  mongo: {
+ *    uri: String,
+ *    collectionPrefix: String
+ *    },
+ *  rabbit: {
+ *    url: String,
+ *    serviceName: String
+ *    },
+ *  node: {
+ *    network: string,
+ *    providers: Array
+ *    }
+ *  }}
+ */
 
 module.exports = {
   mongo: {
