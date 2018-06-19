@@ -5,7 +5,7 @@
  */
 
 /**
- * Mongoose model. Represents a block in eth
+ * Mongoose model. Represents a transaction in bitcoin
  * @module models/blockModel
  * @returns {Object} Mongoose model
  */

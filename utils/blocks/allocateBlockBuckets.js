@@ -11,6 +11,14 @@ const _ = require('lodash'),
   providerService = require('../../services/providerService'),
   log = bunyan.createLogger({name: 'app.utils.allocateBlockBuckets'});
 
+/**
+ * @function
+ * @description validate that all blocks in the specified range are exist in db
+ * @param minBlock - validate from block
+ * @param maxBlock - validate to block
+ * @param chunkSize - the chunk validation size
+ * @return {Promise<Array>}
+ */
 const blockValidator = async (minBlock, maxBlock, chunkSize) => {
 
   const data = [];
