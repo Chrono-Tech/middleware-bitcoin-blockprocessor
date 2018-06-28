@@ -84,7 +84,7 @@ class BlockWatchingService {
 
       try {
 
-        let block = await Promise.resolve(this.processBlock()).timeout(60000 * 5);
+        let block = await this.processBlock();
         await addBlock(block, true);
 
         let lastTx = await models.txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
