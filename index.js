@@ -16,6 +16,7 @@ customNetworkRegistrator(config.node.network);
 const filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   amqp = require('amqplib'),
   bunyan = require('bunyan'),
+  providerService = require('./services/providerService'),
   _ = require('lodash'),
   BlockWatchingService = require('./services/blockWatchingService'),
   SyncCacheService = require('./services/syncCacheService'),
@@ -54,10 +55,25 @@ const init = async function () {
 
 
   await channel.assertExchange('events', 'topic', {durable: false});
+  await channel.assertExchange('internal', 'topic', {durable: false});
+  await channel.assertQueue(`${config.rabbit.serviceName}_current_provider.get`, {durable: false});
+  await channel.bindQueue(`${config.rabbit.serviceName}_current_provider.get`, 'internal', `${config.rabbit.serviceName}_current_provider.get`);
 
   const masterNodeService = new MasterNodeService(channel, config.rabbit.serviceName);
   await masterNodeService.start();
 
+  providerService.events.on('provider_set', providerURI => {
+    let providerIndex = _.findIndex(config.node.providers, providerURI);
+    if (providerIndex !== -1)
+      channel.publish('internal', `${config.rabbit.serviceName}_current_provider.set`, new Buffer(JSON.stringify({index: providerIndex})));
+  });
+
+  channel.consume(`${config.rabbit.serviceName}_current_provider.get`, async () => {
+    let providerInstance = await providerService.get();
+    let providerIndex = _.findIndex(config.node.providers, provider => provider.http === providerInstance.http);
+    if (providerIndex !== -1)
+      channel.publish('internal', `${config.rabbit.serviceName}_current_provider.set`, new Buffer(JSON.stringify({index: providerIndex})));
+  }, {noAck: true});
 
   const syncCacheService = new SyncCacheService();
 
@@ -65,16 +81,17 @@ const init = async function () {
     log.info(`${block.hash} (${block.number}) added to cache.`);
     await channel.publish('events', `${config.rabbit.serviceName}_block`, new Buffer(JSON.stringify({block: block.number})));
     let filtered = await filterTxsByAccountsService(block.txs);
-    await Promise.all(filtered.map(item =>
-      channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: block.number}))))
-    ));
+
+    for (let item of filtered)
+      for (let tx of item.txs)
+        await channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(tx)));
   };
 
   let txEventCallback = async tx => {
     let filtered = await filterTxsByAccountsService([tx]);
-    await Promise.all(filtered.map(item =>
-      channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(Object.assign(item, {block: -1}))))
-    ));
+    for (let item of filtered)
+      for (let tx of item.txs)
+        await channel.publish('events', `${config.rabbit.serviceName}_transaction.${item.address}`, new Buffer(JSON.stringify(tx)));
   };
 
 
