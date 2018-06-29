@@ -19,7 +19,6 @@ const Promise = require('bluebird'),
 class IPCExec {
 
   constructor(providerURI) {
-    //this.callbacks = {};
     this._requests = {};
     this.events = new EventEmitter();
     this.ipcInstance = new ipc.IPC;
