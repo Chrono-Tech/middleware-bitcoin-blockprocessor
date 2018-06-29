@@ -19,7 +19,7 @@ const Promise = require('bluebird'),
 class IPCExec {
 
   constructor(providerURI) {
-    this.callbacks = {};
+    this._requests = {};
     this.events = new EventEmitter();
     this.ipcInstance = new ipc.IPC;
     this.ipcPath = path.parse(providerURI);
@@ -47,20 +47,24 @@ class IPCExec {
     });
 
     this.ipcInstance.of[this.ipcPath.base].on('message', async data => {
+
+      if (!this._requests[data.id])
+        return;
+
       if (!data.error) {
-        this.callbacks[data.id](null, data.result);
-        delete this.callbacks[data.id];
+        this._requests[data.id].callback(null, data.result);
+        delete this._requests[data.id];
         return;
       }
 
-      this.callbacks[data.id](data.error);
-      delete this.callbacks[data.id];
+      this._requests[data.id].callback(data.error);
+      delete this._requests[data.id];
     });
 
     this.ipcInstance.of[this.ipcPath.base].on('error', async err => {
-      for (let key of Object.keys(this.callbacks)) {
-        this.callbacks[key](err);
-        delete this.callbacks[key];
+      for (let key of Object.keys(this._requests)) {
+        this._requests[key].callback(err);
+        delete this._requests[key];
       }
     });
   }
@@ -94,7 +98,13 @@ class IPCExec {
 
     return new Promise((res, rej) => {
       const requestId = uniqid();
-      this.callbacks[requestId] = (err, result) => err ? rej(err) : res(result);
+      this._requests[requestId] = {
+        callback: (err, result) => {
+          clearTimeout(this._requests[requestId].timeoutId);
+          err ? rej(err) : res(result);
+        },
+        timeoutId: setTimeout(() => rej({code: 4}), 30000)
+      };
 
       this.ipcInstance.of[this.ipcPath.base].emit('message', JSON.stringify({
         method: method,
