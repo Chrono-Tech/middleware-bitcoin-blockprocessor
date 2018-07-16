@@ -15,13 +15,7 @@ before_install:
   - sudo apt-get install python2.7 git-all pkg-config libncurses5-dev libssl-dev libnss3-dev libexpat-dev libc6-dev -y
 
 install:
-  - sudo rabbitmq-plugins enable rabbitmq_web_stomp
   - npm install
-  - npm install -g pm2
-
-before_script:
-    - pm2 start node_modules/bcoin-ipc-node/index.js
-    - pm2 start index.js
 
 script:
   - sleep 30 && npm test -- --coverage
