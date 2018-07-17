@@ -8,11 +8,18 @@ require('dotenv/config');
 
 const config = require('../config'),
   models = require('../models'),
+  bcoin = require('bcoin'),
+  spawn = require('child_process').spawn,
   fuzzTests = require('./fuzz'),
   performanceTests = require('./performance'),
   featuresTests = require('./features'),
+  Network = require('bcoin/lib/protocol/network'),
+  blockTests = require('./blocks'),
   Promise = require('bluebird'),
-  mongoose = require('mongoose');
+  mongoose = require('mongoose'),
+  amqp = require('amqplib'),
+  providerService = require('../services/providerService'),
+  ctx = {};
 
 mongoose.Promise = Promise;
 mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
@@ -23,18 +30,37 @@ describe('core/blockProcessor', function () {
 
   before(async () => {
     models.init();
+    ctx.network = Network.get('regtest');
+    ctx.keyPair = bcoin.hd.generate(ctx.network);
+    ctx.keyPair2 = bcoin.hd.generate(ctx.network);
+    ctx.amqp = {};
+    ctx.amqp.instance = await amqp.connect(config.rabbit.url);
+    ctx.amqp.channel = await ctx.amqp.instance.createChannel();
+    await ctx.amqp.channel.assertExchange('events', 'topic', {durable: false});
+
+    ctx.nodePid = spawn('node', ['tests/utils/bcoin/node.js'], {env: process.env, stdio: 'ignore'});
+    await Promise.delay(10000);
   });
 
   after(async () => {
     mongoose.disconnect();
     mongoose.accounts.close();
+    await ctx.amqp.instance.close();
+    //let provider = await providerService.get();
+    //provider.instance.removeAllListeners('disconnect');
+    //provider.zmq.disconnect(provider.currentProvider.zmq);
+    //provider.instance.disconnect();
+    ctx.nodePid.kill();
+    //process.exit(0);
   });
 
 
-  describe('fuzz', fuzzTests);
+  describe('block', () => blockTests(ctx));
 
-  describe('performance', performanceTests);
+  describe('performance', () => performanceTests(ctx));
 
-  describe('features', featuresTests);
+  describe('fuzz', () => fuzzTests(ctx));
+
+  describe('features', () => featuresTests(ctx));
 
 });

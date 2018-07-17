@@ -20,10 +20,6 @@ install:
 script:
   - sleep 30 && npm test -- --coverage
 
-after_script:
-  - pm2 logs --nostream
-  - pm2 kill && pkill PM2
-
 after_success:
   - FULL_GCR_KEY="-----BEGIN PRIVATE KEY-----\n"$GCR_KEY"\n-----END PRIVATE KEY-----\n"
   - sed -i -e "s%\PWD%$FULL_GCR_KEY%g" gcregistry.json

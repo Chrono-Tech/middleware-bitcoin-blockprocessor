@@ -44,19 +44,19 @@ module.exports = async txs => {
   let relations = _.chain(filteredByChunks)
     .flattenDeep()
     .map(account => ({
-        address: account.address,
-        txs: _.chain(txs)
-          .filter(tx =>
-            _.chain(tx.inputs)
-              .union(tx.outputs)
-              .flattenDeep()
-              .map(i => (i.address || '').toString())
-              .includes(account.address)
-              .value()
-          )
-          .map(tx => tx.hash)
-          .value()
-      })
+      address: account.address,
+      txs: _.chain(txs)
+        .filter(tx =>
+          _.chain(tx.inputs)
+            .union(tx.outputs)
+            .flattenDeep()
+            .map(i => (i.address || '').toString())
+            .includes(account.address)
+            .value()
+        )
+        .map(tx => tx.hash)
+        .value()
+    })
     )
     .value();
 

@@ -4,10 +4,7 @@
  * @author Egor Zuev <zyev.egor@gmail.com>
  */
 
-require('dotenv/config');
-
 const config = require('../../config'),
-  Network = require('bcoin/lib/protocol/network'),
   models = require('../../models'),
   bcoin = require('bcoin'),
   spawn = require('child_process').spawn,
@@ -17,29 +14,11 @@ const config = require('../../config'),
   SyncCacheService = require('../../services/syncCacheService'),
   BlockWatchingService = require('../../services/blockWatchingService'),
   providerService = require('../../services/providerService'),
-  _ = require('lodash'),
-  amqp = require('amqplib'),
-  ctx = {
-    network: null,
-    keyPair: [],
-    amqp: {
-      instance: null
-    }
-  };
+  _ = require('lodash');
 
-module.exports = () => {
+module.exports = (ctx) => {
 
-  it('init environment', async () => {
-    ctx.network = Network.get('regtest');
-    ctx.keyPair = bcoin.hd.generate(ctx.network);
-
-    ctx.amqp.instance = await amqp.connect(config.rabbit.url);
-    ctx.amqp.channel = await ctx.amqp.instance.createChannel();
-    await ctx.amqp.channel.assertExchange('events', 'topic', {durable: false});
-
-    ctx.nodePid = spawn('node', ['tests/utils/bcoin/node.js'], {env: process.env, stdio: 'inherit'});
-    await Promise.delay(10000);
-
+  before(async () => {
     await models.blockModel.remove({});
     await models.txModel.remove({});
     await models.coinModel.remove({});
@@ -54,7 +33,7 @@ module.exports = () => {
     let hd = new memwatch.HeapDiff();
     const syncCacheService = new SyncCacheService();
     await syncCacheService.start();
-    await Promise.delay(20000);
+    await Promise.delay(60000);
 
     let diff = hd.end();
     let leakObjects = _.filter(diff.change.details, detail => detail.size_bytes / 1024 / 1024 > 3);
@@ -85,7 +64,7 @@ module.exports = () => {
 
   it('validate tx notification speed', async () => {
     let keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
-    ctx.blockProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'inherit'});
+    ctx.blockProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'ignore'});
     await Promise.delay(10000);
 
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
@@ -98,10 +77,10 @@ module.exports = () => {
 
     await Promise.all([
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test.transaction`);
-        await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test.transaction`, 'events', `${config.rabbit.serviceName}_transaction.${address}`);
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_performance.transaction`);
+        await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_performance.transaction`, 'events', `${config.rabbit.serviceName}_transaction.${address}`);
         await new Promise(res =>
-          ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test.transaction`, async data => {
+          ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_performance.transaction`, async data => {
             const message = JSON.parse(data.content.toString());
 
             if (message.hash === tx.txid()) {
@@ -146,13 +125,8 @@ module.exports = () => {
   });
 
 
-  it('kill environment', async () => {
-    let provider = await providerService.get();
-    provider.instance.removeAllListeners('disconnect');
+  after(async () => {
     ctx.blockProcessorPid.kill();
-    await Promise.delay(10000);
-    ctx.nodePid.kill();
-    await ctx.amqp.instance.close();
   });
 
 };
