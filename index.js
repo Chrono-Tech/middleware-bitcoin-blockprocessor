@@ -62,7 +62,7 @@ const init = async function () {
   const masterNodeService = new MasterNodeService(channel, config.rabbit.serviceName);
   await masterNodeService.start();
 
-  providerService.events.on('provider_set', providerURI => {
+  providerService.on('provider_set', providerURI => {
     let providerIndex = _.findIndex(config.node.providers, providerURI);
     if (providerIndex !== -1)
       channel.publish('internal', `${config.rabbit.serviceName}_current_provider.set`, new Buffer(JSON.stringify({index: providerIndex})));
@@ -95,7 +95,7 @@ const init = async function () {
   };
 
 
-  syncCacheService.events.on('block', blockEventCallback);
+  syncCacheService.on('block', blockEventCallback);
 
   let endBlock = await syncCacheService.start();
 
@@ -103,7 +103,7 @@ const init = async function () {
     if (config.sync.shadow)
       return res();
 
-    syncCacheService.events.on('end', () => {
+    syncCacheService.on('end', () => {
       log.info(`cached the whole blockchain up to block: ${endBlock}`);
       res();
     });
@@ -111,10 +111,10 @@ const init = async function () {
 
   const blockWatchingService = new BlockWatchingService(endBlock);
 
-  blockWatchingService.events.on('block', blockEventCallback);
-  blockWatchingService.events.on('tx', txEventCallback);
+  blockWatchingService.on('block', blockEventCallback);
+  blockWatchingService.on('tx', txEventCallback);
 
-  await blockWatchingService.startSync(endBlock);
+  await blockWatchingService.startSync();
 
 };
 

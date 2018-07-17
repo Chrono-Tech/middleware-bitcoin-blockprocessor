@@ -7,18 +7,19 @@
 require('dotenv/config');
 
 const config = require('../config'),
-  Network = require('bcoin/lib/protocol/network'),
   models = require('../models'),
   bcoin = require('bcoin'),
-  expect = require('chai').expect,
+  spawn = require('child_process').spawn,
+  fuzzTests = require('./fuzz'),
+  performanceTests = require('./performance'),
+  featuresTests = require('./features'),
+  Network = require('bcoin/lib/protocol/network'),
+  blockTests = require('./blocks'),
   Promise = require('bluebird'),
+  mongoose = require('mongoose'),
+  amqp = require('amqplib'),
   providerService = require('../services/providerService'),
-  _ = require('lodash'),
-  ctx = {
-    network: null,
-    accounts: []
-  },
-  mongoose = require('mongoose');
+  ctx = {};
 
 mongoose.Promise = Promise;
 mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
@@ -28,44 +29,38 @@ mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMon
 describe('core/blockProcessor', function () {
 
   before(async () => {
-
-    ctx.network = Network.get('regtest');
-
-    let keyPair = bcoin.hd.generate(ctx.network);
-    let keyPair2 = bcoin.hd.generate(ctx.network);
-    let keyPair3 = bcoin.hd.generate(ctx.network);
-    let keyPair4 = bcoin.hd.generate(ctx.network);
-
-    ctx.accounts.push(keyPair, keyPair2, keyPair3, keyPair4);
-
     models.init();
+    ctx.network = Network.get('regtest');
+    ctx.keyPair = bcoin.hd.generate(ctx.network);
+    ctx.keyPair2 = bcoin.hd.generate(ctx.network);
+    ctx.amqp = {};
+    ctx.amqp.instance = await amqp.connect(config.rabbit.url);
+    ctx.amqp.channel = await ctx.amqp.instance.createChannel();
+    await ctx.amqp.channel.assertExchange('events', 'topic', {durable: false});
+
+    ctx.nodePid = spawn('node', ['tests/utils/bcoin/node.js'], {env: process.env, stdio: 'ignore'});
+    await Promise.delay(10000);
   });
 
-  after(() => {
-    return mongoose.disconnect();
+  after(async () => {
+    mongoose.disconnect();
+    mongoose.accounts.close();
+    await ctx.amqp.instance.close();
+    //let provider = await providerService.get();
+    //provider.instance.removeAllListeners('disconnect');
+    //provider.zmq.disconnect(provider.currentProvider.zmq);
+    //provider.instance.disconnect();
+    ctx.nodePid.kill();
+    //process.exit(0);
   });
 
-  it('generate blocks and initial coins', async () => {
-    let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    const provider = await providerService.get();
-    let response = await provider.instance.execute('generatetoaddress', [10, keyring.getAddress().toString()]);
-    expect(response).to.not.be.undefined;
-  });
 
-  it('validate balance greater 0', async () => {
-    await Promise.delay(20000);
-    let keyring = new bcoin.keyring(ctx.accounts[0].privateKey, ctx.network);
-    let coins = await models.coinModel.find({address: keyring.getAddress().toString()});
+  describe('block', () => blockTests(ctx));
 
-    let newSumm = _.chain(coins)
-      .map(c => parseInt(c.value))
-      .sum()
-      .value();
+  describe('performance', () => performanceTests(ctx));
 
+  describe('fuzz', () => fuzzTests(ctx));
 
-    expect(newSumm).to.be.gt(0);
-
-  });
-
+  describe('features', () => featuresTests(ctx));
 
 });
