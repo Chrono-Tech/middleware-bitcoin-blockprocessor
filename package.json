@@ -10,7 +10,6 @@
     "bunyan": "^1.8.12",
     "dotenv": "^4.0.0",
     "lodash": "^4.17.4",
-    "memwatch-next": "^0.3.0",
     "mongoose": "^4.13.7",
     "mongoose-long": "^0.2.1",
     "node-ipc": "^9.1.1",
@@ -23,15 +22,16 @@
   },
   "devDependencies": {
     "babel-eslint": "^7.2.3",
+    "bzmq": "^0.1.0",
+    "chai": "^4.1.1",
     "eslint": "^4.4.1",
     "eslint-plugin-chronobank": "github:chronobank/eslint-plugin-chronobank",
-    "chai": "^4.1.1",
-    "mocha": "^3.5.0",
-    "bcoin-ipc-node": "github:chronobank/bcoin-ipc-node"
+    "memwatch-next": "^0.3.0",
+    "mocha": "^5.2.0"
   },
   "scripts": {
     "lint": "node ./node_modules/eslint/bin/eslint.js -c .eslintrc.js --ext .js --fix --ignore-path .eslintignore .",
-    "test": "node ./node_modules/mocha/bin/mocha -t 90000 tests/index.js"
+    "test": "node --max_old_space_size=4096 ./node_modules/mocha/bin/mocha -t 150000 tests/index.js"
   },
   "author": "chronobank",
   "license": "AGPL-3.0",

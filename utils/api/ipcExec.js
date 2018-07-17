@@ -16,11 +16,11 @@ const Promise = require('bluebird'),
  * @description http provider for bitcoin node
  */
 
-class IPCExec {
+class IPCExec extends EventEmitter{
 
   constructor(providerURI) {
+    super();
     this._requests = {};
-    this.events = new EventEmitter();
     this.ipcInstance = new ipc.IPC;
     this.ipcPath = path.parse(providerURI);
     Object.assign(this.ipcInstance.config, {
@@ -43,7 +43,7 @@ class IPCExec {
     this.ipcInstance.connectTo(this.ipcPath.base);
 
     this.ipcInstance.of[this.ipcPath.base].on('disconnect', () => {
-      this.events.emit('disconnect');
+      this.emit('disconnect');
     });
 
     this.ipcInstance.of[this.ipcPath.base].on('message', async data => {
