@@ -22,10 +22,10 @@ const bunyan = require('bunyan'),
  * @returns {Promise.<*>}
  */
 
-class SyncCacheService {
+class SyncCacheService extends EventEmitter {
 
   constructor() {
-    this.events = new EventEmitter();
+    super();
   }
 
   /** @function
@@ -75,7 +75,7 @@ class SyncCacheService {
             _.pull(buckets, bucket);
         }
 
-        this.events.emit('end');
+        this.emit('end');
 
       } catch (err) {
         log.error(err);
@@ -105,7 +105,7 @@ class SyncCacheService {
       await addBlock(block);
 
       _.pull(bucket, blockNumber);
-      this.events.emit('block', block);
+      this.emit('block', block);
     });
   }
 }

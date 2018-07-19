@@ -28,10 +28,10 @@ const config = require('../config'),
  * @returns Object<BlockWatchingService>
  */
 
-class BlockWatchingService {
+class BlockWatchingService extends EventEmitter {
 
   constructor(currentHeight) {
-    this.events = new EventEmitter();
+    super();
     this.currentHeight = currentHeight;
     this.isSyncing = false;
     this.lastUnconfirmedTxIndex = -1;
@@ -59,7 +59,8 @@ class BlockWatchingService {
 
       await Promise.mapSeries(mempool, async txHash => {
         const tx = await provider.instance.execute('getrawtransaction', [txHash, false]);
-        await this.unconfirmedTxEvent(tx).catch(()=>{});
+        await this.unconfirmedTxEvent(tx).catch(() => {
+        });
       });
     }
 
@@ -69,7 +70,7 @@ class BlockWatchingService {
 
     this.unconfirmedTxEventCallback = result => this.unconfirmedTxEvent(result).catch(() => {
     });
-    providerService.events.on('unconfirmedTx', this.unconfirmedTxEventCallback);
+    providerService.on('unconfirmedTx', this.unconfirmedTxEventCallback);
 
   }
 
@@ -91,7 +92,7 @@ class BlockWatchingService {
         this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
         this.currentHeight++;
         this.lastBlockHash = block.hash;
-        this.events.emit('block', block);
+        this.emit('block', block);
       } catch (err) {
 
         if (err.code === 0) {
@@ -127,7 +128,7 @@ class BlockWatchingService {
     tx.index = this.lastUnconfirmedTxIndex + 1;
     await addUnconfirmedTx(tx);
     this.lastUnconfirmedTxIndex++;
-    this.events.emit('tx', tx);
+    this.emit('tx', tx);
   }
 
   /**
@@ -137,7 +138,8 @@ class BlockWatchingService {
    */
   async stopSync() {
     this.isSyncing = false;
-    this.node.pool.removeListener('tx', this.pendingTxCallback);
+    providerService.removeListener('unconfirmedTx', this.unconfirmedTxEventCallback);
+
   }
 
   /**
