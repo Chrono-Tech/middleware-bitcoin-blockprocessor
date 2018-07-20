@@ -46,12 +46,7 @@ describe('core/blockProcessor', function () {
     mongoose.disconnect();
     mongoose.accounts.close();
     await ctx.amqp.instance.close();
-    //let provider = await providerService.get();
-    //provider.instance.removeAllListeners('disconnect');
-    //provider.zmq.disconnect(provider.currentProvider.zmq);
-    //provider.instance.disconnect();
     ctx.nodePid.kill();
-    //process.exit(0);
   });
 
 
