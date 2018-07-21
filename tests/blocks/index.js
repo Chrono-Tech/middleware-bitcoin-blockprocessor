@@ -51,7 +51,7 @@ module.exports = (ctx) => {
     expect(block.hash).to.equal(hash);
 
     for (let tx of block.txs) {
-      expect(tx).to.have.keys('hash', 'inputs', 'outputs', 'index');
+      expect(tx).to.have.keys('hash', 'inputs', 'outputs', 'index', 'timestamp');
 
       for (let input of tx.inputs)
         expect(input).to.have.keys('prevout', 'address');
@@ -192,13 +192,6 @@ module.exports = (ctx) => {
     expect(tx).to.have.all.keys('index', 'timestamp', 'blockNumber', 'hash', 'inputs', 'outputs', 'confirmations');
 
   });
-
-  /*  it('kill environment', async () => {
-      let provider = await providerService.get();
-      provider._destroy();
-      ctx.nodePid.kill();
-      await Promise.delay(10000);
-    });*/
 
 
 };

@@ -39,14 +39,20 @@ module.exports = (ctx) => {
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.block`, 'events', `${config.rabbit.serviceName}_block`);
         await new Promise(res =>
           ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.block`, async data => {
+
+            if (!data)
+              return;
+
             const message = JSON.parse(data.content.toString());
             expect(message).to.have.all.keys('block');
 
             _.pull(generatedBlockNumbers, message.block);
 
-            if (!generatedBlockNumbers.length)
-              res();
+            if (generatedBlockNumbers.length)
+              return;
 
+            await ctx.amqp.channel.deleteQueue(`app_${config.rabbit.serviceName}_test_features.block`);
+            res();
           }, {noAck: true})
         );
       })(),
@@ -57,7 +63,6 @@ module.exports = (ctx) => {
         await instance.execute('generatetoaddress', [1000, keyring.getAddress().toString()]);
       })()
     ]);
-
   });
 
   it('validate transaction event for registered user', async () => {
@@ -75,12 +80,18 @@ module.exports = (ctx) => {
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.transaction`, 'events', `${config.rabbit.serviceName}_transaction.${address}`);
         await new Promise(res =>
           ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.transaction`, async data => {
+
+            if(!data)
+              return;
+
             const message = JSON.parse(data.content.toString());
             expect(message).to.have.all.keys('index', 'timestamp', 'blockNumber', 'hash', 'inputs', 'outputs', 'confirmations');
 
-            if (tx && message.hash === tx.txid())
-              res();
+            if (tx && message.hash !== tx.txid())
+              return;
 
+            await ctx.amqp.channel.deleteQueue(`app_${config.rabbit.serviceName}_test_features.transaction`);
+            res();
           }, {noAck: true})
         );
       })(),
@@ -138,22 +149,26 @@ module.exports = (ctx) => {
 
     return await Promise.all([
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.transaction2`);
-        await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.transaction2`, 'events', `${config.rabbit.serviceName}_transaction.${address2}`);
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.transaction`);
+        await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.transaction`, 'events', `${config.rabbit.serviceName}_transaction.${address2}`);
         await new Promise((res, rej) => {
-          ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.transaction2`, rej, {noAck: true});
+          ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.transaction`, (data)=>{
+            if(data)
+              rej();
+          }, {noAck: true});
 
           let checkInterval = setInterval(async () => {
 
-            if(!tx)
+            if (!tx)
               return;
 
             let txExist = await models.txModel.count({_id: tx.txid()});
 
-            if(!txExist)
+            if (!txExist)
               return;
 
             clearInterval(checkInterval);
+            await ctx.amqp.channel.deleteQueue(`app_${config.rabbit.serviceName}_test_features.transaction`);
             res();
 
           }, 2000);

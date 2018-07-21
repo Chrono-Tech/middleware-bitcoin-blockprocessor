@@ -26,7 +26,8 @@ module.exports = async (blockNumber) => {
   let block = BlockModel.fromRaw(blockRaw, 'hex').getJSON(network);
 
   block.txs = block.txs.map(tx => {
-    tx = _.pick(tx, ['hash', 'inputs', 'outputs', 'index']);
+    tx.timestamp = tx.time || block.time;
+    tx = _.pick(tx, ['hash', 'inputs', 'outputs', 'index', 'timestamp']);
     tx.inputs = tx.inputs.map(input => _.pick(input, ['prevout', 'address']));
     tx.outputs = tx.outputs.map(output => _.pick(output, ['value', 'address']));
     return tx;
