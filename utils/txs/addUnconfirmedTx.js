@@ -6,10 +6,11 @@
 
 const bunyan = require('bunyan'),
   _ = require('lodash'),
+  config = require('../../config'),
   buildCoins = require('../../utils/coins/buildCoins'),
   models = require('../../models'),
   sem = require('semaphore')(1),
-  log = bunyan.createLogger({name: 'app.utils.addUnconfirmedTx'});
+  log = bunyan.createLogger({name: 'app.utils.addUnconfirmedTx', level: config.logs.level});
 
 /**
  * @function
