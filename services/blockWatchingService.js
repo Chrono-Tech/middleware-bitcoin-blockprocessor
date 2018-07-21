@@ -19,7 +19,8 @@ const config = require('../config'),
   removeUnconfirmedTxs = require('../utils/txs/removeUnconfirmedTxs'),
   EventEmitter = require('events'),
   getBlock = require('../utils/blocks/getBlock'),
-  log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
+  rollbackBlock = require('../utils/blocks/rollbackBlock'),
+  log = bunyan.createLogger({name: 'app.services.blockWatchingService', level: config.logs.level});
 
 /**
  * @service
@@ -65,7 +66,6 @@ class BlockWatchingService extends EventEmitter {
     }
 
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
-    this.lastBlockHash = null;
     this.doJob();
 
     this.unconfirmedTxEventCallback = result => this.unconfirmedTxEvent(result).catch(() => {
@@ -91,7 +91,6 @@ class BlockWatchingService extends EventEmitter {
         let lastTx = await models.txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
         this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
         this.currentHeight++;
-        this.lastBlockHash = block.hash;
         this.emit('block', block);
       } catch (err) {
 
@@ -102,11 +101,9 @@ class BlockWatchingService extends EventEmitter {
         }
 
         if (_.get(err, 'code') === 1) {
-          const currentBlock = await models.blockModel.find({
-            number: {$gte: 0}
-          }).sort({number: -1}).limit(2);
-          this.lastBlockHash = _.get(currentBlock, '1._id');
-          this.currentHeight = _.get(currentBlock, '0.number', 0);
+          await rollbackBlock(this.currentHeight);
+          const currentBlock = await models.blockModel.findOne({number: {$gte: 0}}).sort({number: -1}).select('number');
+          this.currentHeight = _.get(currentBlock, 'number', 0);
           continue;
         }
 
@@ -161,7 +158,7 @@ class BlockWatchingService extends EventEmitter {
     const lastBlockHash = this.currentHeight === 0 ? null : await provider.instance.execute('getblockhash', [this.currentHeight - 1]);
     let savedBlock = await models.blockModel.count({_id: lastBlockHash});
 
-    if (!savedBlock && this.lastBlockHash)
+    if (!savedBlock && lastBlockHash)
       return Promise.reject({code: 1}); //head has been blown off
 
     return await getBlock(this.currentHeight);

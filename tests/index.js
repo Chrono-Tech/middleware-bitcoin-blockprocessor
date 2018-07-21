@@ -5,6 +5,7 @@
  */
 
 require('dotenv/config');
+process.env.LOG_LEVEL = 'error';
 
 const config = require('../config'),
   models = require('../models'),
@@ -18,7 +19,6 @@ const config = require('../config'),
   Promise = require('bluebird'),
   mongoose = require('mongoose'),
   amqp = require('amqplib'),
-  providerService = require('../services/providerService'),
   ctx = {};
 
 mongoose.Promise = Promise;
@@ -46,12 +46,7 @@ describe('core/blockProcessor', function () {
     mongoose.disconnect();
     mongoose.accounts.close();
     await ctx.amqp.instance.close();
-    //let provider = await providerService.get();
-    //provider.instance.removeAllListeners('disconnect');
-    //provider.zmq.disconnect(provider.currentProvider.zmq);
-    //provider.instance.disconnect();
     ctx.nodePid.kill();
-    //process.exit(0);
   });
 
 
