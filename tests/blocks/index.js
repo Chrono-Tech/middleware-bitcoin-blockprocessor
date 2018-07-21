@@ -11,6 +11,7 @@ const Network = require('bcoin/lib/protocol/network'),
   _ = require('lodash'),
   network = Network.get(config.node.network),
   TxModel = require('bcoin/lib/primitives/tx'),
+  filterTxsByAccountsService = require('../../services/filterTxsByAccountsService'),
   getBlock = require('../../utils/blocks/getBlock'),
   addBlock = require('../../utils/blocks/addBlock'),
   getFullTxFromCache = require('../../utils/txs/getFullTxFromCache'),
@@ -154,7 +155,7 @@ module.exports = (ctx) => {
 
     const keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
-    await instance.execute('generatetoaddress', [1, keyring.getAddress().toString()])
+    await instance.execute('generatetoaddress', [1, keyring.getAddress().toString()]);
 
     const height = await instance.execute('getblockcount', []);
     const block = await getBlock(height);
@@ -190,8 +191,41 @@ module.exports = (ctx) => {
     const tx = await getFullTxFromCache(txHash);
 
     expect(tx).to.have.all.keys('index', 'timestamp', 'blockNumber', 'hash', 'inputs', 'outputs', 'confirmations');
-
   });
 
+  it('check filterTxsByAccountsService', async () => {
+
+    const keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
+    const keyring2 = new bcoin.keyring(ctx.keyPair2, ctx.network);
+
+    await models.accountModel.create({address: keyring.getAddress().toString()});
+
+    const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
+    await instance.execute('generatetoaddress', [1, keyring.getAddress().toString()]);
+    await instance.execute('generatetoaddress', [1, keyring2.getAddress().toString()]);
+
+    const height = await instance.execute('getblockcount', []);
+
+    for (let i = 0; i < 2; i++) {
+     let block = await getBlock(height - i);
+     await addBlock(block);
+    }
+
+    await models.coinModel.update({outputBlock: height - 1, outputTxIndex: 0}, {
+      $set: {
+        inputBlock: height,
+        inputTxIndex: 0,
+        inputIndex: 0
+      }
+    });
+
+    const block = await getBlock(height);
+    const txHash = block.txs[0].hash;
+    const tx = await getFullTxFromCache(txHash);
+    const filtered = await filterTxsByAccountsService([tx]);
+
+    expect(!!_.find(filtered, {address: keyring.getAddress().toString()})).to.eq(true);
+    expect(!!_.find(filtered, {address: keyring2.getAddress().toString()})).to.eq(false);
+  });
 
 };
