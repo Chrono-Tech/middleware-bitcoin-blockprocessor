@@ -81,5 +81,8 @@ module.exports = {
   node: {
     network: process.env.NETWORK || 'regtest',
     providers: createConfigProviders(process.env.PROVIDERS || getDefault())
+  },
+  logs: {
+    level: process.env.LOG_LEVEL || 'info'
   }
 };

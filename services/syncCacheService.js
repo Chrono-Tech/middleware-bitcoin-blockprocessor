@@ -7,6 +7,7 @@
 const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
+  config = require('../config'),
   EventEmitter = require('events'),
   syncCacheServiceInterface = require('middleware-common-components/interfaces/blockProcessor/syncCacheServiceInterface'),
   allocateBlockBuckets = require('../utils/blocks/allocateBlockBuckets'),
@@ -14,7 +15,7 @@ const bunyan = require('bunyan'),
   getBlock = require('../utils/blocks/getBlock'),
   addBlock = require('../utils/blocks/addBlock'),
   providerService = require('../services/providerService'),
-  log = bunyan.createLogger({name: 'app.services.syncCacheService'});
+  log = bunyan.createLogger({name: 'app.services.syncCacheService', level: config.logs.level});
 
 /**
  * @service

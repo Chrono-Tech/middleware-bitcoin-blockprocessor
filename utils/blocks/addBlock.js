@@ -6,12 +6,13 @@
 
 const bunyan = require('bunyan'),
   _ = require('lodash'),
+  config = require('../../config'),
   Promise = require('bluebird'),
   sem = require('semaphore')(3),
   removeUnconfirmedTxs = require('../txs/removeUnconfirmedTxs'),
   buildCoins = require('../../utils/coins/buildCoins'),
   models = require('../../models'),
-  log = bunyan.createLogger({name: 'app.utils.addBlock'});
+  log = bunyan.createLogger({name: 'app.utils.addBlock', level: config.logs.level});
 
 /**
  * @function

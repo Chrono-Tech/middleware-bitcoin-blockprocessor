@@ -20,7 +20,7 @@ const filterTxsByAccountsService = require('./services/filterTxsByAccountsServic
   _ = require('lodash'),
   BlockWatchingService = require('./services/blockWatchingService'),
   SyncCacheService = require('./services/syncCacheService'),
-  log = bunyan.createLogger({name: 'core.blockProcessor'});
+  log = bunyan.createLogger({name: 'core.blockProcessor', level: config.logs.level});
 
 /**
  * @module entry point

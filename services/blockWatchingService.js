@@ -20,7 +20,7 @@ const config = require('../config'),
   EventEmitter = require('events'),
   getBlock = require('../utils/blocks/getBlock'),
   rollbackBlock = require('../utils/blocks/rollbackBlock'),
-  log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
+  log = bunyan.createLogger({name: 'app.services.blockWatchingService', level: config.logs.level});
 
 /**
  * @service
