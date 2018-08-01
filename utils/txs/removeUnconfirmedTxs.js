@@ -1,7 +1,8 @@
 const bunyan = require('bunyan'),
+  config = require('../../config'),
   providerService = require('../../services/providerService'),
   models = require('../../models'),
-  log = bunyan.createLogger({name: 'app.utils.addBlock'});
+  log = bunyan.createLogger({name: 'app.utils.addBlock', level: config.logs.level});
 
 /**
  * @function

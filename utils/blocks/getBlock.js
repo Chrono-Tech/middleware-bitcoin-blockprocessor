@@ -8,6 +8,7 @@ const config = require('../../config'),
   Network = require('bcoin/lib/protocol/network'),
   network = Network.get(config.node.network),
   providerService = require('../../services/providerService'),
+  _ = require('lodash'),
   BlockModel = require('bcoin/lib/primitives/block');
 
 /**
@@ -23,6 +24,14 @@ module.exports = async (blockNumber) => {
   let hash = await provider.instance.execute('getblockhash', [blockNumber]);
   let blockRaw = await provider.instance.execute('getblock', [hash, false]);
   let block = BlockModel.fromRaw(blockRaw, 'hex').getJSON(network);
+
+  block.txs = block.txs.map(tx => {
+    tx.timestamp = tx.time || block.time;
+    tx = _.pick(tx, ['hash', 'inputs', 'outputs', 'index', 'timestamp']);
+    tx.inputs = tx.inputs.map(input => _.pick(input, ['prevout', 'address']));
+    tx.outputs = tx.outputs.map(output => _.pick(output, ['value', 'address']));
+    return tx;
+  });
 
   return {
     number: blockNumber,

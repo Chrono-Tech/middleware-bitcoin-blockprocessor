@@ -5,7 +5,6 @@
  */
 
 const bunyan = require('bunyan'),
-  _ = require('lodash'),
   config = require('../config'),
   sem = require('semaphore')(1),
   zmq = require('zeromq'),
@@ -14,7 +13,7 @@ const bunyan = require('bunyan'),
   providerServiceInterface = require('middleware-common-components/interfaces/blockProcessor/providerServiceInterface'),
   Promise = require('bluebird'),
   EventEmitter = require('events'),
-  log = bunyan.createLogger({name: 'app.services.providerService'});
+  log = bunyan.createLogger({name: 'app.services.providerService', level: config.logs.level});
 
 /**
  * @service
@@ -22,10 +21,10 @@ const bunyan = require('bunyan'),
  * @returns Object<ProviderService>
  */
 
-class ProviderService {
+class ProviderService extends EventEmitter {
 
   constructor() {
-    this.events = new EventEmitter();
+    super();
     this.connector = null;
 
     if (config.node.providers.length > 1)
@@ -47,7 +46,7 @@ class ProviderService {
     if (this.connector.instance.disconnect)
       this.connector.instance.disconnect();
     this.switchConnectorSafe();
-    this.events.emit('disconnected');
+    this.emit('disconnected');
   }
 
   /**@function
@@ -105,8 +104,8 @@ class ProviderService {
     this.connector.zmq.subscribe('rawtx');
     this.connector.zmq.on('close', () => this.resetConnector());
 
-    if (_.get(this.connector.instance, 'events')) {
-      this.connector.instance.events.on('disconnect', () => this.resetConnector());
+    if (this.connector.instance instanceof EventEmitter) {
+      this.connector.instance.on('disconnect', () => this.resetConnector());
     } else
       this.pingIntervalId = setInterval(async () => {
 
@@ -119,7 +118,7 @@ class ProviderService {
       }, 5000);
 
     this.connector.zmq.on('message', (topic, tx) =>
-      this.events.emit('unconfirmedTx', tx)
+      this.emit('unconfirmedTx', tx)
     );
 
 

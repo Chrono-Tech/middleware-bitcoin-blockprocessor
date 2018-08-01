@@ -7,6 +7,7 @@
 const bunyan = require('bunyan'),
   _ = require('lodash'),
   Promise = require('bluebird'),
+  config = require('../config'),
   EventEmitter = require('events'),
   syncCacheServiceInterface = require('middleware-common-components/interfaces/blockProcessor/syncCacheServiceInterface'),
   allocateBlockBuckets = require('../utils/blocks/allocateBlockBuckets'),
@@ -14,7 +15,7 @@ const bunyan = require('bunyan'),
   getBlock = require('../utils/blocks/getBlock'),
   addBlock = require('../utils/blocks/addBlock'),
   providerService = require('../services/providerService'),
-  log = bunyan.createLogger({name: 'app.services.syncCacheService'});
+  log = bunyan.createLogger({name: 'app.services.syncCacheService', level: config.logs.level});
 
 /**
  * @service
@@ -22,10 +23,10 @@ const bunyan = require('bunyan'),
  * @returns {Promise.<*>}
  */
 
-class SyncCacheService {
+class SyncCacheService extends EventEmitter {
 
   constructor() {
-    this.events = new EventEmitter();
+    super();
   }
 
   /** @function
@@ -75,7 +76,7 @@ class SyncCacheService {
             _.pull(buckets, bucket);
         }
 
-        this.events.emit('end');
+        this.emit('end');
 
       } catch (err) {
         log.error(err);
@@ -105,7 +106,7 @@ class SyncCacheService {
       await addBlock(block);
 
       _.pull(bucket, blockNumber);
-      this.events.emit('block', block);
+      this.emit('block', block);
     });
   }
 }

@@ -19,7 +19,8 @@ const config = require('../config'),
   removeUnconfirmedTxs = require('../utils/txs/removeUnconfirmedTxs'),
   EventEmitter = require('events'),
   getBlock = require('../utils/blocks/getBlock'),
-  log = bunyan.createLogger({name: 'app.services.blockWatchingService'});
+  rollbackBlock = require('../utils/blocks/rollbackBlock'),
+  log = bunyan.createLogger({name: 'app.services.blockWatchingService', level: config.logs.level});
 
 /**
  * @service
@@ -28,10 +29,10 @@ const config = require('../config'),
  * @returns Object<BlockWatchingService>
  */
 
-class BlockWatchingService {
+class BlockWatchingService extends EventEmitter {
 
   constructor(currentHeight) {
-    this.events = new EventEmitter();
+    super();
     this.currentHeight = currentHeight;
     this.isSyncing = false;
     this.lastUnconfirmedTxIndex = -1;
@@ -59,17 +60,17 @@ class BlockWatchingService {
 
       await Promise.mapSeries(mempool, async txHash => {
         const tx = await provider.instance.execute('getrawtransaction', [txHash, false]);
-        await this.unconfirmedTxEvent(tx).catch(()=>{});
+        await this.unconfirmedTxEvent(tx).catch(() => {
+        });
       });
     }
 
     log.info(`caching from block:${this.currentHeight} for network:${config.node.network}`);
-    this.lastBlockHash = null;
     this.doJob();
 
     this.unconfirmedTxEventCallback = result => this.unconfirmedTxEvent(result).catch(() => {
     });
-    providerService.events.on('unconfirmedTx', this.unconfirmedTxEventCallback);
+    providerService.on('unconfirmedTx', this.unconfirmedTxEventCallback);
 
   }
 
@@ -90,8 +91,7 @@ class BlockWatchingService {
         let lastTx = await models.txModel.find({blockNumber: -1}).sort({index: -1}).limit(1);
         this.lastUnconfirmedTxIndex = _.get(lastTx, '0.index', -1);
         this.currentHeight++;
-        this.lastBlockHash = block.hash;
-        this.events.emit('block', block);
+        this.emit('block', block);
       } catch (err) {
 
         if (err.code === 0) {
@@ -101,11 +101,9 @@ class BlockWatchingService {
         }
 
         if (_.get(err, 'code') === 1) {
-          const currentBlock = await models.blockModel.find({
-            number: {$gte: 0}
-          }).sort({number: -1}).limit(2);
-          this.lastBlockHash = _.get(currentBlock, '1._id');
-          this.currentHeight = _.get(currentBlock, '0.number', 0);
+          await rollbackBlock(this.currentHeight);
+          const currentBlock = await models.blockModel.findOne({number: {$gte: 0}}).sort({number: -1}).select('number');
+          this.currentHeight = _.get(currentBlock, 'number', 0);
           continue;
         }
 
@@ -127,7 +125,7 @@ class BlockWatchingService {
     tx.index = this.lastUnconfirmedTxIndex + 1;
     await addUnconfirmedTx(tx);
     this.lastUnconfirmedTxIndex++;
-    this.events.emit('tx', tx);
+    this.emit('tx', tx);
   }
 
   /**
@@ -137,7 +135,8 @@ class BlockWatchingService {
    */
   async stopSync() {
     this.isSyncing = false;
-    this.node.pool.removeListener('tx', this.pendingTxCallback);
+    providerService.removeListener('unconfirmedTx', this.unconfirmedTxEventCallback);
+
   }
 
   /**
@@ -159,7 +158,7 @@ class BlockWatchingService {
     const lastBlockHash = this.currentHeight === 0 ? null : await provider.instance.execute('getblockhash', [this.currentHeight - 1]);
     let savedBlock = await models.blockModel.count({_id: lastBlockHash});
 
-    if (!savedBlock && this.lastBlockHash)
+    if (!savedBlock && lastBlockHash)
       return Promise.reject({code: 1}); //head has been blown off
 
     return await getBlock(this.currentHeight);
