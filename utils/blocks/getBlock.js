@@ -35,7 +35,7 @@ module.exports = async (blockNumber) => {
 
   return {
     number: blockNumber,
-    hash: block.hash,
+    hash: hash,
     txs: block.txs,
     timestamp: block.time,
     bits: block.bits,

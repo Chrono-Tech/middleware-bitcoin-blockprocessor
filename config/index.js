@@ -33,8 +33,8 @@ const createConfigProviders = (providers) => {
     .map(provider => {
       const data = provider.split('@');
       return {
-        uri: data[0].trim(),
-        zmq: data[1].trim()
+        uri: data.length === 3 ? `${data[0].trim()}@${data[1]}` : data[0].trim(),
+        zmq: (data.length === 3 ? data[2] : data[1]).trim()
       };
     })
     .value();
