@@ -5,8 +5,8 @@
  */
 
 const config = require('../../config'),
-  Network = require('bcoin/lib/protocol/network'),
-  network = Network.get(config.node.network),
+  networks = require('../../networks'),
+  network = networks[config.node.network],
   providerService = require('../../services/providerService'),
   _ = require('lodash'),
   BlockModel = require('bcoin/lib/primitives/block');

@@ -6,6 +6,9 @@
 
 const _ = require('lodash'),
   Promise = require('bluebird'),
+  config = require('../config'),
+  networks = require('../networks'),
+  network = networks[config.node.network],
   getFullTxFromCache = require('../utils/txs/getFullTxFromCache'),
   models = require('../models');
 
@@ -27,6 +30,13 @@ module.exports = async txs => {
     .map(i => i.address || '')
     .compact()
     .uniq()
+    .map(address =>
+      _.chain(network.getAllAddressForms(address))
+        .values()
+        .compact()
+        .value()
+    )
+    .flattenDeep()
     .chunk(100)
     .value();
 
@@ -44,19 +54,28 @@ module.exports = async txs => {
   let relations = _.chain(filteredByChunks)
     .flattenDeep()
     .map(account => ({
-      address: account.address,
-      txs: _.chain(txs)
-        .filter(tx =>
-          _.chain(tx.inputs)
-            .union(tx.outputs)
-            .flattenDeep()
-            .map(i => (i.address || '').toString())
-            .includes(account.address)
-            .value()
-        )
-        .map(tx => tx.hash)
-        .value()
-    })
+        address: account.address,
+        txs: _.chain(txs)
+          .filter(tx =>
+            _.chain(tx.inputs)
+              .union(tx.outputs)
+              .flattenDeep()
+              .map(i => i.address || '')
+              .compact()
+              .uniq()
+              .map(address =>
+                _.chain(network.getAllAddressForms(address))
+                  .values()
+                  .compact()
+                  .value()
+              )
+              .flattenDeep()
+              .includes(account.address)
+              .value()
+          )
+          .map(tx => tx.hash)
+          .value()
+      })
     )
     .value();
 

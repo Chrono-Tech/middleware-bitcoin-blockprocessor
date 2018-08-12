@@ -8,12 +8,8 @@ const mongoose = require('mongoose'),
   config = require('./config'),
   models = require('./models'),
   MasterNodeService = require('middleware-common-components/services/blockProcessor/MasterNodeService'),
-  customNetworkRegistrator = require('./networks'),
-  Promise = require('bluebird');
-
-customNetworkRegistrator(config.node.network);
-
-const filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
+  Promise = require('bluebird'),
+  filterTxsByAccountsService = require('./services/filterTxsByAccountsService'),
   amqp = require('amqplib'),
   bunyan = require('bunyan'),
   providerService = require('./services/providerService'),

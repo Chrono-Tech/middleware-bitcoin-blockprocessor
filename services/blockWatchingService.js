@@ -11,8 +11,8 @@ const config = require('../config'),
   addBlock = require('../utils/blocks/addBlock'),
   models = require('../models'),
   TxModel = require('bcoin/lib/primitives/tx'),
-  Network = require('bcoin/lib/protocol/network'),
-  network = Network.get(config.node.network),
+  networks = require('../networks'),
+  network = networks[config.node.network],
   providerService = require('../services/providerService'),
   addUnconfirmedTx = require('../utils/txs/addUnconfirmedTx'),
   blockWatchingInterface = require('middleware-common-components/interfaces/blockProcessor/blockWatchingServiceInterface'),
@@ -149,7 +149,7 @@ class BlockWatchingService extends EventEmitter {
     const provider = await providerService.get();
 
     let hash = await provider.instance.execute('getblockhash', [this.currentHeight]).catch(err =>
-      err.code && err.code === -32600 ? null : Promise.reject(err)
+      err.code && [-32600, -8].includes(err.code) ? null : Promise.reject(err)
     );
 
     if (!hash)

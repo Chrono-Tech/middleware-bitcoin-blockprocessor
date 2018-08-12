@@ -3,29 +3,32 @@
  * Licensed under the AGPL Version 3 license.
  * @author Egor Zuev <zyev.egor@gmail.com>
  */
-const dash = {};
 
-dash.type = 'dash';
+const AbstractNetworkClass = require('./abstract/AbstractNetworkClass');
 
-dash.keyPrefix = {
-  privkey: 204,
-  xpubkey: 0x0488B21E,
-  xprivkey: 0x0488ADE4,
-  xpubkey58: 'tpub',
-  xprivkey58: 'tprv',
-  coinType: 1
-};
+class DASH extends AbstractNetworkClass {
 
-dash.addressPrefix = {
-  pubkeyhash: 76,
-  scripthash: 16,
-  witnesspubkeyhash: 0x03,
-  witnessscripthash: 0x28,
-  bech32: 'tb'
-};
+  constructor() {
+    super({
+      type: 'dash',
+      keyPrefix: {
+        privkey: 204,
+        xpubkey: 0x0488B21E,
+        xprivkey: 0x0488ADE4,
+        xpubkey58: 'tpub',
+        xprivkey58: 'tprv',
+        coinType: 1
+      },
+      addressPrefix: {
+        pubkeyhash: 76,
+        scripthash: 16,
+        witnesspubkeyhash: 0x03,
+        witnessscripthash: 0x28,
+        bech32: 'tb'
+      }
+    });
 
-dash.deploys = [];
+  }
+}
 
-dash.checkpointMap = [];
-
-module.exports = dash;
+module.exports = new DASH();
