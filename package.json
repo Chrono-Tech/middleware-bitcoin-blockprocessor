@@ -4,7 +4,7 @@
   "main": "index.js",
   "dependencies": {
     "amqplib": "^0.5.1",
-    "bcoin": "1.0.0-beta.15",
+    "bcoin": "^1.0.2",
     "bitcoincashjs": "^0.1.10",
     "bitcoinjs-lib": "^4.0.1",
     "bluebird": "^3.5.0",

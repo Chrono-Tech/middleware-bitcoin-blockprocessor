@@ -7,7 +7,7 @@
 const _ = require('lodash'),
   Promise = require('bluebird'),
   config = require('../config'),
-  networks = require('../networks'),
+  networks = require('middleware-common-components/factories/btcNetworks'),
   network = networks[config.node.network],
   getFullTxFromCache = require('../utils/txs/getFullTxFromCache'),
   models = require('../models');

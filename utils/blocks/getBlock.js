@@ -5,7 +5,7 @@
  */
 
 const config = require('../../config'),
-  networks = require('../../networks'),
+  networks = require('middleware-common-components/factories/btcNetworks'),
   network = networks[config.node.network],
   providerService = require('../../services/providerService'),
   _ = require('lodash'),
