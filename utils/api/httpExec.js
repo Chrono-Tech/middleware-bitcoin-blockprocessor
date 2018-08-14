@@ -1,4 +1,5 @@
 const request = require('request-promise'),
+  _ = require('lodash'),
   uniqid = require('uniqid');
 
 /**
@@ -53,7 +54,7 @@ class HTTPExec {
       return data.result;
     } catch (e) {
       this._isConnected = false;
-      return Promise.reject(e);
+      return Promise.reject(_.get(e, 'error.error', e));
     }
 
   }

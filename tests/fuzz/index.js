@@ -6,8 +6,8 @@
 
 const models = require('../../models'),
   config = require('../../config'),
-  bcoin = require('bcoin'),
   _ = require('lodash'),
+  keyring = require('bcoin/lib/primitives/keyring'),
   uniqid = require('uniqid'),
   expect = require('chai').expect,
   Promise = require('bluebird'),
@@ -26,13 +26,13 @@ module.exports = (ctx) => {
   });
 
   it('validate block processor caching ability', async () => {
-    let keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
+    let key = new keyring(ctx.keyPair);
 
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
     const currentNodeHeight = await instance.execute('getblockcount', []);
 
     if (currentNodeHeight < 1000)
-      await instance.execute('generatetoaddress', [1000, keyring.getAddress().toString()]);
+      await instance.execute('generatetoaddress', [1000, key.getAddress('base58', ctx.network)]);
 
     const newCurrentNodeHeight = await instance.execute('getblockcount', []);
     await Promise.delay(newCurrentNodeHeight === 1000 ? 60000 : newCurrentNodeHeight * 10);
@@ -43,13 +43,13 @@ module.exports = (ctx) => {
 
 
   it('kill and restart block processor', async () => {
-    let keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
+    let key = new keyring(ctx.keyPair, ctx.network);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
 
     ctx.blockProcessorPid.kill();
     await Promise.delay(5000);
     let currentNodeHeight = await instance.execute('getblockcount', []);
-    await instance.execute('generatetoaddress', [50, keyring.getAddress().toString()]);
+    await instance.execute('generatetoaddress', [50, key.getAddress('base58', ctx.network)]);
     ctx.blockProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'ignore'});
     await Promise.delay(60000);
     let blockCount = await models.blockModel.count();
