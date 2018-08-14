@@ -7,7 +7,7 @@
 const Network = require('bcoin/lib/protocol/network'),
   models = require('../../models'),
   config = require('../../config'),
-  bcoin = require('bcoin'),
+  keyring = require('bcoin/lib/primitives/keyring'),
   _ = require('lodash'),
   network = Network.get(config.node.network),
   TxModel = require('bcoin/lib/primitives/tx'),
@@ -35,9 +35,9 @@ module.exports = (ctx) => {
 
 
   it('generate some coins for account', async () => {
-    let keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
+    let key = new keyring(ctx.keyPair);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
-    return await instance.execute('generatetoaddress', [1000, keyring.getAddress().toString()])
+    return await instance.execute('generatetoaddress', [1000, key.getAddress('base58', ctx.network)])
   });
 
 
@@ -95,7 +95,7 @@ module.exports = (ctx) => {
 
     let blocks = [];
 
-    for (let i = 0; i < height; i++)
+    for (let i = 0; i < height - 2; i++)
       blocks.push(i);
 
     blocks = _.shuffle(blocks);
@@ -153,17 +153,15 @@ module.exports = (ctx) => {
 
   it('add unconfirmed tx', async () => {
 
-    const keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
+    const key = new keyring(ctx.keyPair);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
-    await instance.execute('generatetoaddress', [1, keyring.getAddress().toString()]);
+    await instance.execute('generatetoaddress', [1, key.getAddress('base58', ctx.network)]);
 
     const height = await instance.execute('getblockcount', []);
     const block = await getBlock(height);
 
     const txHash = block.txs[0].hash;
-
     const rawTx = await instance.execute('getrawtransaction', [txHash]);
-
     const tx = TxModel.fromRaw(rawTx, 'hex').getJSON(network);
     tx.index = 0;
 
@@ -180,9 +178,9 @@ module.exports = (ctx) => {
 
   it('get full tx', async () => {
 
-    const keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
+    const key = new keyring(ctx.keyPair);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
-    await instance.execute('generatetoaddress', [1, keyring.getAddress().toString()]);
+    await instance.execute('generatetoaddress', [1, key.getAddress('base58', ctx.network)]);
 
     const height = await instance.execute('getblockcount', []);
     const block = await getBlock(height - 1);
@@ -195,14 +193,14 @@ module.exports = (ctx) => {
 
   it('check filterTxsByAccountsService', async () => {
 
-    const keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
-    const keyring2 = new bcoin.keyring(ctx.keyPair2, ctx.network);
+    const key = new keyring(ctx.keyPair);
+    const key2 = new keyring(ctx.keyPair2);
 
-    await models.accountModel.create({address: keyring.getAddress().toString()});
+    await models.accountModel.create({address: key.getAddress('base58', ctx.network)});
 
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
-    await instance.execute('generatetoaddress', [1, keyring.getAddress().toString()]);
-    await instance.execute('generatetoaddress', [1, keyring2.getAddress().toString()]);
+    await instance.execute('generatetoaddress', [1, key.getAddress('base58', ctx.network)]);
+    await instance.execute('generatetoaddress', [1, key2.getAddress('base58', ctx.network)]);
 
     const height = await instance.execute('getblockcount', []);
 
@@ -224,8 +222,8 @@ module.exports = (ctx) => {
     const tx = await getFullTxFromCache(txHash);
     const filtered = await filterTxsByAccountsService([tx]);
 
-    expect(!!_.find(filtered, {address: keyring.getAddress().toString()})).to.eq(true);
-    expect(!!_.find(filtered, {address: keyring2.getAddress().toString()})).to.eq(false);
+    expect(!!_.find(filtered, {address: key.getAddress('base58', ctx.network)})).to.eq(true);
+    expect(!!_.find(filtered, {address: key2.getAddress('base58', ctx.network)})).to.eq(false);
   });
 
 };

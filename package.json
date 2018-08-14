@@ -28,12 +28,11 @@
     "chai": "^4.1.1",
     "eslint": "^4.4.1",
     "eslint-plugin-chronobank": "github:chronobank/eslint-plugin-chronobank",
-    "memwatch-next": "^0.3.0",
     "mocha": "^5.2.0"
   },
   "scripts": {
     "lint": "node ./node_modules/eslint/bin/eslint.js -c .eslintrc.js --ext .js --fix --ignore-path .eslintignore .",
-    "test": "node --max_old_space_size=4096 ./node_modules/mocha/bin/mocha -t 150000 tests/index.js"
+    "test": "node ./node_modules/mocha/bin/mocha -t 150000 -gc tests/index.js"
   },
   "author": "chronobank",
   "license": "AGPL-3.0",
