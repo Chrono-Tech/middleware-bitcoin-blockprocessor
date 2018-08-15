@@ -3,7 +3,7 @@ const bcoin = require('bcoin'),
   IPC = require('./plugins/IPC');
 
 module.exports = (async () => {
-  const node = new bcoin.fullnode({
+  const node = new bcoin.FullNode({
     network: 'regtest',
     db: 'memory',
     indexTX: true,
