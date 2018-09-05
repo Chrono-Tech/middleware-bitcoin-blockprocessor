@@ -1,4 +1,5 @@
 const request = require('request-promise'),
+  _ = require('lodash'),
   uniqid = require('uniqid');
 
 /**
@@ -10,7 +11,16 @@ const request = require('request-promise'),
 class HTTPExec {
 
   constructor(providerURI) {
-    this.httpPath = providerURI;
+    const data = providerURI.split('@');
+    this.httpPath = data[0];
+    if(data[1]){
+      const creds = data[1].split(':');
+      this.httpCreds = {
+        user: creds[0],
+        pass: creds[1]
+      };
+    }
+
     this._isConnected = true;
   }
 
@@ -33,13 +43,18 @@ class HTTPExec {
       }
     };
 
+    if(this.httpCreds)
+      requestBody.auth = {
+        user: this.httpCreds.user,
+        pass: this.httpCreds.pass
+      };
 
     try {
       const data = await request(requestBody);
       return data.result;
     } catch (e) {
       this._isConnected = false;
-      return Promise.reject(e);
+      return Promise.reject(_.get(e, 'error.error', e));
     }
 
   }

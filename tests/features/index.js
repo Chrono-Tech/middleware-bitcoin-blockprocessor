@@ -8,7 +8,9 @@ require('dotenv/config');
 
 const models = require('../../models'),
   config = require('../../config'),
-  bcoin = require('bcoin'),
+  MTX = require('bcoin/lib/primitives/mtx'),
+  Coin = require('bcoin/lib/primitives/coin'),
+  keyring = require('bcoin/lib/primitives/keyring'),
   _ = require('lodash'),
   expect = require('chai').expect,
   Promise = require('bluebird'),
@@ -28,7 +30,7 @@ module.exports = (ctx) => {
   });
 
   it('validate block event', async () => {
-    let keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
+    let key = new keyring(ctx.keyPair);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
 
     const generatedBlockNumbers = [];
@@ -60,16 +62,16 @@ module.exports = (ctx) => {
         for (let number = 1; number <= 1000; number++)
           generatedBlockNumbers.push(number);
 
-        await instance.execute('generatetoaddress', [1000, keyring.getAddress().toString()]);
+        await instance.execute('generatetoaddress', [1000, key.getAddress('base58', ctx.network)]);
       })()
     ]);
   });
 
   it('validate transaction event for registered user', async () => {
-    let keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
+    let key = new keyring(ctx.keyPair, ctx.network);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
 
-    const address = keyring.getAddress().toString();
+    const address = key.getAddress('base58', ctx.network);
     await new models.accountModel({address}).save();
 
     let tx;
@@ -97,28 +99,28 @@ module.exports = (ctx) => {
       })(),
       (async () => {
 
-        let coins = await instance.execute('getcoinsbyaddress', [keyring.getAddress().toString()]);
+        let coins = await instance.execute('getcoinsbyaddress', [address]);
 
         let inputCoins = _.chain(coins)
           .transform((result, coin) => {
-            result.coins.push(bcoin.coin.fromJSON(coin));
+            result.coins.push(Coin.fromJSON(coin));
             result.amount += coin.value;
           }, {amount: 0, coins: []})
           .value();
 
-        const mtx = new bcoin.mtx();
+        const mtx = new MTX();
 
         mtx.addOutput({
-          address: keyring.getAddress(),
+          address: address,
           value: Math.round(inputCoins.amount * 0.7)
         });
 
         await mtx.fund(inputCoins.coins, {
           rate: 10000,
-          changeAddress: keyring.getAddress()
+          changeAddress: address
         });
 
-        mtx.sign(keyring);
+        mtx.sign(key);
         tx = mtx.toTX();
         await Promise.delay(10000);
         await instance.execute('sendrawtransaction', [tx.toRaw().toString('hex')]);
@@ -128,23 +130,24 @@ module.exports = (ctx) => {
 
 
   it('generate some coins for accountB', async () => {
-    let keyring = new bcoin.keyring(ctx.keyPair2, ctx.network);
+    let key = new keyring(ctx.keyPair2);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
-    return await instance.execute('generatetoaddress', [100, keyring.getAddress().toString()])
+    return await instance.execute('generatetoaddress', [100, key.getAddress('base58', ctx.network)])
   });
 
   it('generate some coins for accountA (in order to unlock coins for accountB)', async () => {
-    let keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
+    let key = new keyring(ctx.keyPair);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
-    return await instance.execute('generatetoaddress', [100, keyring.getAddress().toString()])
+    return await instance.execute('generatetoaddress', [100, key.getAddress('base58', ctx.network)])
   });
 
   it('validate transaction event for not registered user', async () => {
-    let keyring = new bcoin.keyring(ctx.keyPair, ctx.network);
-    let keyring2 = new bcoin.keyring(ctx.keyPair2, ctx.network);
+    let key = new keyring(ctx.keyPair);
+    let key2 = new keyring(ctx.keyPair2);
     const instance = providerService.getConnectorFromURI(config.node.providers[0].uri);
 
-    const address2 = keyring2.getAddress().toString();
+    const address = key.getAddress('base58', ctx.network);
+    const address2 = key2.getAddress('base58', ctx.network);
     let tx;
 
     return await Promise.all([
@@ -177,28 +180,28 @@ module.exports = (ctx) => {
       })(),
       (async () => {
 
-        let coins = await instance.execute('getcoinsbyaddress', [keyring.getAddress().toString()]);
+        let coins = await instance.execute('getcoinsbyaddress', [address]);
 
         let inputCoins = _.chain(coins)
           .transform((result, coin) => {
-            result.coins.push(bcoin.coin.fromJSON(coin));
+            result.coins.push(Coin.fromJSON(coin));
             result.amount += coin.value;
           }, {amount: 0, coins: []})
           .value();
 
-        const mtx = new bcoin.mtx();
+        const mtx = new MTX();
 
         mtx.addOutput({
-          address: keyring2.getAddress(),
+          address: address2,
           value: Math.round(inputCoins.amount * 0.7)
         });
 
         await mtx.fund(inputCoins.coins, {
           rate: 10000,
-          changeAddress: keyring.getAddress()
+          changeAddress: address
         });
 
-        mtx.sign(keyring);
+        mtx.sign(key);
         tx = mtx.toTX();
         await instance.execute('sendrawtransaction', [tx.toRaw().toString('hex')]);
       })()

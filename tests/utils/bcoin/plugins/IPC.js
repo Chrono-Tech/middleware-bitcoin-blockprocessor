@@ -1,7 +1,7 @@
 const ipc = require('node-ipc'),
   path = require('path'),
   fs = require('fs'),
-  RPCBase = require('bcoin/lib/http/rpcbase');
+  RPCBase = require('bcoin/lib/node/rpc');
 
 class IPC {
 
@@ -34,8 +34,6 @@ class IPC {
         coin.getJSON(this.node.network.type)
       );
     });
-
-    this.node.rpc.add('getmetabyaddress', this.node.getMetaByAddress.bind(this.node));
 
     ipc.serve(() => {
         ipc.server.on('message', async (data, socket) => {
