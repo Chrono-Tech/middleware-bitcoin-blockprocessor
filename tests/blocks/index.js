@@ -52,7 +52,7 @@ module.exports = (ctx) => {
     expect(block.hash).to.equal(hash);
 
     for (let tx of block.txs) {
-      expect(tx).to.have.keys('hash', 'inputs', 'outputs', 'index', 'timestamp');
+      expect(tx).to.have.keys('hash', 'inputs', 'outputs', 'index', 'timestamp', 'size');
 
       for (let input of tx.inputs)
         expect(input).to.have.keys('prevout', 'address');
@@ -188,7 +188,7 @@ module.exports = (ctx) => {
     const txHash = block.txs[0].hash;
     const tx = await getFullTxFromCache(txHash);
 
-    expect(tx).to.have.all.keys('index', 'timestamp', 'blockNumber', 'hash', 'inputs', 'outputs', 'confirmations');
+    expect(tx).to.have.all.keys('index', 'timestamp', 'blockNumber', 'hash', 'inputs', 'outputs', 'confirmations', 'size');
   });
 
   it('check filterTxsByAccountsService', async () => {

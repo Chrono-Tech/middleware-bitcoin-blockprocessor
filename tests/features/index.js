@@ -87,7 +87,7 @@ module.exports = (ctx) => {
               return;
 
             const message = JSON.parse(data.content.toString());
-            expect(message).to.have.all.keys('index', 'timestamp', 'blockNumber', 'hash', 'inputs', 'outputs', 'confirmations');
+            expect(message).to.have.all.keys('index', 'timestamp', 'blockNumber', 'hash', 'inputs', 'outputs', 'confirmations', 'size');
 
             if (tx && message.hash !== tx.txid())
               return;

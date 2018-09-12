@@ -24,6 +24,7 @@ const addTx = async (tx) => {
   tx = {
     _id: tx.hash,
     index: tx.index,
+    size: tx.hex.length / 2,
     blockNumber: -1,
     timestamp: Date.now(),
     inputs: tx.inputs,
