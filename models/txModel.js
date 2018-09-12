@@ -17,7 +17,7 @@ const TX = new mongoose.Schema({
   _id: {type: String},
   blockNumber: {type: Number, required: true, default: -1},
   index: {type: Number},
-  fee: {type: Number},
+  size: {type: Number},
   timestamp: {type: Number, required: true, default: Date.now}
 }, { _id: false });
 
