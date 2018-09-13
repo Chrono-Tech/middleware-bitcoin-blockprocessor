@@ -53,6 +53,7 @@ const updateDbStateWithBlock = async (block, removePending = false) => {
   let txs = block.txs.map(tx => ({
     _id: tx.hash,
     index: tx.index,
+    size: tx.size,
     blockNumber: block.number,
     timestamp: tx.timestamp || Date.now(),
     inputs: tx.inputs,

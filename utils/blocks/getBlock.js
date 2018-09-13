@@ -25,11 +25,14 @@ module.exports = async (blockNumber) => {
   let blockRaw = await provider.instance.execute('getblock', [hash, false]);
   let block = BlockModel.fromRaw(blockRaw, 'hex').getJSON(network);
 
+
   block.txs = block.txs.map(tx => {
     tx.timestamp = tx.time || block.time;
-    tx = _.pick(tx, ['hash', 'inputs', 'outputs', 'index', 'timestamp']);
+    tx.size = tx.hex.length / 2;
+    tx = _.pick(tx, ['hash', 'inputs', 'outputs', 'index', 'timestamp', 'size']);
     tx.inputs = tx.inputs.map(input => _.pick(input, ['prevout', 'address']));
     tx.outputs = tx.outputs.map(output => _.pick(output, ['value', 'address']));
+
     return tx;
   });
 
