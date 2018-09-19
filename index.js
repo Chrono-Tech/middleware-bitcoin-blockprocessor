@@ -36,25 +36,28 @@ mongoose.connect(config.mongo.data.uri, {useMongoClient: true});
 mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMongoClient: true});
 
 
-const runInfrastucture = async function () {
+const runSystem = async function () {
   const rabbit = new AmqpService(
-    config.infrastructureRabbit.url, 
-    config.infrastructureRabbit.exchange,
-    config.infrastructureRabbit.serviceName
+    config.systemRabbit.url, 
+    config.systemRabbit.exchange,
+    config.systemRabbit.serviceName
   );
   const info = InfrastructureInfo(require('./package.json'));
-  const infrastructure = new InfrastructureService(info, rabbit, {checkInterval: 10000});
-  await infrastructure.start();
-  infrastructure.on(infrastructure.REQUIREMENT_ERROR, ({requirement, version}) => {
+  const system = new InfrastructureService(info, rabbit, {checkInterval: 10000});
+  await system.start();
+  system.on(system.REQUIREMENT_ERROR, ({requirement, version}) => {
     log.error(`Not found requirement with name ${requirement.name} version=${requirement.version}.` +
         ` Last version of this middleware=${version}`);
     process.exit(1);
   });
-  await infrastructure.checkRequirements();
-  infrastructure.periodicallyCheck();
+  await system.checkRequirements();
+  system.periodicallyCheck();
 };
 
+
 const init = async function () {
+  if (config.checkSystem)
+    await runSystem();
 
   [mongoose.accounts, mongoose.connection].forEach(connection =>
     connection.on('disconnected', () => {
@@ -63,8 +66,6 @@ const init = async function () {
   );
 
   models.init();
-  if (config.checkInfrastructure)
-    await runInfrastucture();
 
   let amqpInstance = await amqp.connect(config.rabbit.url);
 
