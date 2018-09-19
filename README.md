@@ -219,6 +219,10 @@ The options are presented below:
 | IPC_NAME (deprecated)   | ipc file name
 | IPC_PATH (deprecated)   | directory, where to store ipc file (you can skip this option on windows)
 | CONNECTION_URI   | the URI of the endpoint (may be ipc or http)
+| INFRASTRUCTURE_RABBIT_URI   | rabbitmq URI connection string for infrastructure
+| INFRASTRUCTURE_RABBIT_SERVICE_NAME   | rabbitmq service name for infrastructure
+| INFRASTRUCTURE_RABBIT_EXCHANGE   | rabbitmq exchange name for infrastructure
+| CHECK_INFRASTRUCTURE | check infrastructure or not (default = true)
 
 
 License
