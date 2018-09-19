@@ -15,9 +15,9 @@ const mongoose = require('mongoose'),
   providerService = require('./services/providerService'),
   _ = require('lodash'),
   
-  AmqpService = require('middleware-common-infrastructure/AmqpService'),
-  InfrastructureInfo = require('middleware-common-infrastructure/InfrastructureInfo'),
-  InfrastructureService = require('middleware-common-infrastructure/InfrastructureService'),
+  AmqpService = require('middleware_common_infrastructure/AmqpService'),
+  InfrastructureInfo = require('middleware_common_infrastructure/InfrastructureInfo'),
+  InfrastructureService = require('middleware_common_infrastructure/InfrastructureService'),
   
   BlockWatchingService = require('./services/blockWatchingService'),
   SyncCacheService = require('./services/syncCacheService'),
@@ -42,7 +42,7 @@ const runSystem = async function () {
     config.systemRabbit.exchange,
     config.systemRabbit.serviceName
   );
-  const info = InfrastructureInfo(require('./package.json'));
+  const info = new InfrastructureInfo(require('./package.json'));
   const system = new InfrastructureService(info, rabbit, {checkInterval: 10000});
   await system.start();
   system.on(system.REQUIREMENT_ERROR, ({requirement, version}) => {
