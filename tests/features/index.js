@@ -25,7 +25,7 @@ module.exports = (ctx) => {
     await models.coinModel.remove({});
     await models.accountModel.remove({});
 
-    ctx.blockProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'inherit'});
+    ctx.blockProcessorPid = spawn('node', ['index.js'], {env: process.env, stdio: 'ignore'});
     await Promise.delay(10000);
   });
 
