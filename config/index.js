@@ -75,6 +75,12 @@ module.exports = {
     url: process.env.RABBIT_URI || 'amqp://localhost:5672',
     serviceName: process.env.RABBIT_SERVICE_NAME || 'app_bitcoin'
   },
+  systemRabbit: {
+    url: process.env.SYSTEM_RABBIT_URI || process.env.RABBIT_URI || 'amqp://localhost:5672',
+    exchange: process.env.SYSTEM_RABBIT_EXCHANGE || 'internal',
+    serviceName: process.env.SYSTEM_RABBIT_SERVICE_NAME || 'system' 
+  },
+  checkSystem: process.env.CHECK_SYSTEM || true,
   sync: {
     shadow: parseInt(process.env.SYNC_SHADOW) || true
   },
