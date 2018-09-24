@@ -45,7 +45,7 @@ const runSystem = async function () {
   const info = new InfrastructureInfo(require('./package.json'));
   const system = new InfrastructureService(info, rabbit, {checkInterval: 10000});
   await system.start();
-  system.on(system.REQUIREMENT_ERROR, ({requirement, version}) => {
+  system.on(system.REQUIREMENT_ERROR, (requirement, version) => {
     log.error(`Not found requirement with name ${requirement.name} version=${requirement.version}.` +
         ` Last version of this middleware=${version}`);
     process.exit(1);
