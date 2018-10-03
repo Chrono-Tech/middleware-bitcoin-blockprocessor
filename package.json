@@ -13,7 +13,7 @@
     "dotenv": "^4.0.0",
     "lodash": "^4.17.4",
     "middleware-common-components": "github:ChronoBank/middleware-common-components",
-    "middleware_common_infrastructure": "^1.0.2",
+    "middleware_common_infrastructure": "github:ChronoBank/middleware-common-infrastructure.git",
     "mongoose": "^4.13.7",
     "mongoose-long": "^0.2.1",
     "node-ipc": "^9.1.1",
