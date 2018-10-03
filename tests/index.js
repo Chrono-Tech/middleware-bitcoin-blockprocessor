@@ -50,6 +50,7 @@ describe('core/blockProcessor', function () {
   });
 
 
+
   describe('block', () => blockTests(ctx));
 
   describe('performance', () => performanceTests(ctx));
