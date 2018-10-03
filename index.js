@@ -78,7 +78,7 @@ const init = async function () {
 
   await channel.assertExchange('events', 'topic', {durable: false});
   await channel.assertExchange('internal', 'topic', {durable: false});
-  await channel.assertQueue(`${config.rabbit.serviceName}_current_provider.get`, {durable: false});
+  await channel.assertQueue(`${config.rabbit.serviceName}_current_provider.get`, {durable: false, autoDelete: true});
   await channel.bindQueue(`${config.rabbit.serviceName}_current_provider.get`, 'internal', `${config.rabbit.serviceName}_current_provider.get`);
 
   const masterNodeService = new MasterNodeService(channel, config.rabbit.serviceName);

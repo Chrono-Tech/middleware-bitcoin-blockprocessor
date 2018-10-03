@@ -37,7 +37,7 @@ module.exports = (ctx) => {
 
     await Promise.all([
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.block`);
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.block`, {autoDelete: true});
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.block`, 'events', `${config.rabbit.serviceName}_block`);
         await new Promise(res =>
           ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.block`, async data => {
@@ -78,12 +78,12 @@ module.exports = (ctx) => {
 
     return await Promise.all([
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.transaction`);
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.transaction`, {autoDelete: true});
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.transaction`, 'events', `${config.rabbit.serviceName}_transaction.${address}`);
         await new Promise(res =>
           ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.transaction`, async data => {
 
-            if(!data)
+            if (!data)
               return;
 
             const message = JSON.parse(data.content.toString());
@@ -152,11 +152,11 @@ module.exports = (ctx) => {
 
     return await Promise.all([
       (async () => {
-        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.transaction`);
+        await ctx.amqp.channel.assertQueue(`app_${config.rabbit.serviceName}_test_features.transaction`, {autoDelete: true});
         await ctx.amqp.channel.bindQueue(`app_${config.rabbit.serviceName}_test_features.transaction`, 'events', `${config.rabbit.serviceName}_transaction.${address2}`);
         await new Promise((res, rej) => {
-          ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.transaction`, (data)=>{
-            if(data)
+          ctx.amqp.channel.consume(`app_${config.rabbit.serviceName}_test_features.transaction`, (data) => {
+            if (data)
               rej();
           }, {noAck: true});
 
