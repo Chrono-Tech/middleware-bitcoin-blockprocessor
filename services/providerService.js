@@ -23,7 +23,7 @@ const bunyan = require('bunyan'),
 
 class ProviderService extends EventEmitter {
 
-  constructor() {
+  constructor () {
     super();
     this.connector = null;
 
@@ -38,7 +38,7 @@ class ProviderService extends EventEmitter {
    * @description reset the current connection
    * @return {Promise<void>}
    */
-  async resetConnector() {
+  async resetConnector () {
     try {
       this.connector.zmq.disconnect(this.connector.currentProvider.zmq);
     } catch (e) {
@@ -55,7 +55,7 @@ class ProviderService extends EventEmitter {
    * @return Object<HttpExec|IpcExec>
    */
 
-  getConnectorFromURI(providerURI) {
+  getConnectorFromURI (providerURI) {
     const isHttpProvider = new RegExp(/(http|https):\/\//).test(providerURI);
     return isHttpProvider ? new httpExec(providerURI) : new ipcExec(providerURI);
   }
@@ -65,16 +65,20 @@ class ProviderService extends EventEmitter {
    * @description choose the connector
    * @return {Promise<null|*>}
    */
-  async switchConnector() {
+  async switchConnector () {
 
     const providerURI = await Promise.any(config.node.providers.map(async providerURI => {
 
       const sock = zmq.socket('sub');
-      sock.connect(providerURI.zmq);
 
-      await Promise.resolve((res, rej) =>
-        sock.on('connected', (err) => err ? rej() : res())
-      ).timeout(1000);
+      await new Promise((res, rej) => {
+        sock.on('connect', res);
+        sock.on('disconnect', rej);
+
+        sock.monitor(500, 0);
+        sock.connect(providerURI.zmq);
+
+      }).timeout(5000);
       sock.disconnect(providerURI.zmq);
 
       const instance = this.getConnectorFromURI(providerURI.uri);
@@ -82,9 +86,8 @@ class ProviderService extends EventEmitter {
       if (instance.disconnect)
         instance.disconnect();
       return providerURI;
-    })).catch(() => {
-      log.error('no available connection!');
-      process.exit(0);
+    })).catch((err) => {
+      this.emit('error', `no available connection: ${err.toString()}`);
     });
 
     const currentProviderURI = this.connector ? this.connector.currentProvider.uri : '';
@@ -130,7 +133,7 @@ class ProviderService extends EventEmitter {
    * @description safe connector switching, by moving requests to
    * @return {Promise<bluebird>}
    */
-  async switchConnectorSafe() {
+  async switchConnectorSafe () {
 
     return new Promise(res => {
       sem.take(async () => {
@@ -146,7 +149,7 @@ class ProviderService extends EventEmitter {
    * @description
    * @return {Promise<*|bluebird>}
    */
-  async get() {
+  async get () {
     return this.connector || await this.switchConnectorSafe();
   }
 
