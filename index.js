@@ -14,14 +14,14 @@ const mongoose = require('mongoose'),
   bunyan = require('bunyan'),
   providerService = require('./services/providerService'),
   _ = require('lodash'),
-  
+
   AmqpService = require('middleware_common_infrastructure/AmqpService'),
   InfrastructureInfo = require('middleware_common_infrastructure/InfrastructureInfo'),
   InfrastructureService = require('middleware_common_infrastructure/InfrastructureService'),
-  
+
   BlockWatchingService = require('./services/blockWatchingService'),
   SyncCacheService = require('./services/syncCacheService'),
-  
+
   log = bunyan.createLogger({name: 'core.blockProcessor', level: config.logs.level});
 
 /**
@@ -38,7 +38,7 @@ mongoose.accounts = mongoose.createConnection(config.mongo.accounts.uri, {useMon
 
 const runSystem = async function () {
   const rabbit = new AmqpService(
-    config.systemRabbit.url, 
+    config.systemRabbit.url,
     config.systemRabbit.exchange,
     config.systemRabbit.serviceName
   );
@@ -47,7 +47,7 @@ const runSystem = async function () {
   await system.start();
   system.on(system.REQUIREMENT_ERROR, (requirement, version) => {
     log.error(`Not found requirement with name ${requirement.name} version=${requirement.version}.` +
-        ` Last version of this middleware=${version}`);
+      ` Last version of this middleware=${version}`);
     process.exit(1);
   });
   await system.checkRequirements();
@@ -66,6 +66,12 @@ const init = async function () {
   );
 
   models.init();
+
+
+  providerService.on('error', err => {
+    log.error(err);
+    process.exit(1);
+  });
 
   let amqpInstance = await amqp.connect(config.rabbit.url);
 
